@@ -4,7 +4,7 @@
 
 | Version | Status | Submitted | Reviewed by | Notes |
 |---|---|---|---|---|
-| 1.3.1 | Pending review | 2026-10-02 | | Display only, sends nothing |
+| 1.3.2 | Pending review | 2026-10-02 | | Display only, sends nothing. Replaces 1.3.1 (fixes fame thresholds; never reviewed). |
 
 **Author:** Spongeh. **Program:** Ashita v4. **Type:** display only: a crafting and fishing
 reference. It reads your own skills and never sends anything to the server.
@@ -101,8 +101,10 @@ PhoenixXI turns fame into a price rank from 1 to 21 for each shop's area
   11), so the guide sells wherever pays you most: a fame shop only beats Jeuno once your
   rank there is above 11.
 - **Fame with one nation lowers your rank with the other two nations' shops.**
-- **Fame levels as points:** fame is stored as points, and the guide counts each level as the
-  points where it starts. Level 9 covers a wide range, so "9 (maxed)" is offered for the top.
+- **Fame levels as points:** fame is stored as points from 0 to 2500, and the guide counts each
+  level as the points where it starts. PhoenixXI uses the pre-2014 thresholds: level 2 at 200,
+  3 at 500, 4 at 900, 5 at 1300, 6 at 1700, 7 at 1950, 8 at 2200 and 9 at 2450. "9 (maxed)" is
+  2500.
 - **Regional vendors** price by their nation's fame. Guild supply counters and guild shops
   ignore fame.
 
@@ -184,11 +186,11 @@ They are read at load and never change while the game runs.
 
 | File | SHA-256 |
 |---|---|
-| `craftguide.lua` | `45dd1e17be2bf51ac196c8673a5045d201f3f6aa39cddb04a19d0e4f6a67ee6e` |
+| `craftguide.lua` | `5c47aca4e6b0921cd87ac8918134dba6d5de7c92bada9f04fe7fd29f00f63d50` |
 | `phxui.lua` | `807bae19ddfb7b541589c2baf008fa384689d79c25bdc4befcf8a1845a8c7a72` |
 | `cg/engine.lua` | `f43babac2bfcbfb0cc458637d478a76ec405bd7ecb982e6d5ac10e5b1c551d1c` |
 | `cg/planner.lua` | `2dfc12a01b5e590366bba500a4efd4d8b7ac8866ec8e83d7b372ed1887f72653` |
-| `cg/fame.lua` | `6b067f59806584cd41e5f010f38a64153cd3b281767f95c43786089dc6bbe822` |
+| `cg/fame.lua` | `d8e555ca9d6f4540e5a6975d9cdb5b2e27ad81f80e99b717c7214e3a069dc879` |
 | `cg/ui.lua` | `980ca1e7ad5f1b6a22cafb8177f0da7e00ebb91cea08bd9ab17a7c9974b632e6` |
 | `data/crafts.lua` | `1a67305c3c19d1d52f2c07600005031deead7694fec2889dead95f5fc0921a37` |
 | `data/prices.lua` | `3c0911afd575a3057f79e958178a0c4c32a53123c655e4ed993facda1b666356` |
