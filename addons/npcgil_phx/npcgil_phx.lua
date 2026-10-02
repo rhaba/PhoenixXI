@@ -8,7 +8,7 @@
 
 addon.name    = 'npcgil_phx';
 addon.author  = 'Spongeh';
-addon.version = '2.2.1';
+addon.version = '2.2.2';
 addon.desc    = 'Farming session tracker for PhoenixXI: treasure-pool loot at fame-adjusted NPC prices, plus gil looted from kills.';
 addon.link    = '';
 

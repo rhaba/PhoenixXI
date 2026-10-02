@@ -24,8 +24,11 @@ M.AREAS = {
 M.AREA_LABELS = { SANDORIA = 'San d\'Oria', BASTOK = 'Bastok', WINDURST = 'Windurst', NORG = 'Norg',
     SELBINA_RABAO = 'Selbina/Rabao', JEUNO = 'Jeuno' };
 
--- Points where fame levels 1-9 start (scripts/data/fame.lua); "10" stands for maxed-out fame.
-M.LEVEL_POINTS = { 0, 50, 125, 225, 325, 425, 488, 550, 613, 2500 };
+-- Points where fame levels 1-9 start on PhoenixXI: the pre-2014 ("era") thresholds from
+-- modules/era/lua/data/fame_rank_points.lua, at the server's 0-2500 scale. (Retail after the
+-- 2014 relaxation, scripts/data/fame.lua, used 0/50/125/225/325/425/488/550/613.)
+-- "10" stands for maxed-out fame.
+M.LEVEL_POINTS = { 0, 200, 500, 900, 1300, 1700, 1950, 2200, 2450, 2500 };
 
 function M.levelLabel(level)
     return level >= 10 and '9 (maxed)' or tostring(level);

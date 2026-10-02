@@ -4,7 +4,7 @@
 
 | Version | Status | Submitted | Reviewed by | Notes |
 |---|---|---|---|---|
-| 2.2.1 | Pending review | 2026-10-02 | | |
+| 2.2.2 | Pending review | 2026-10-02 | | Replaces 2.2.1 (fixes fame thresholds; never reviewed). |
 
 **Author:** Spongeh. **Program:** Ashita v4. **Type:** display only. It reads data the client
 already receives and never sends anything to the server.
@@ -49,6 +49,9 @@ PhoenixXI's rules (`scripts/globals/shop.lua`):
   place to sell.
 - Nation and Norg shops pay up to 2.5% more once your fame there is high. Fame with one nation
   lowers your rank with the other two nations' shops.
+- Fame is stored as points from 0 to 2500. PhoenixXI uses the pre-2014 thresholds: level 2 at
+  200, 3 at 500, 4 at 900, 5 at 1300, 6 at 1700, 7 at 1950, 8 at 2200 and 9 at 2450. Each level
+  counts as the points where it starts, and "9 (maxed)" is 2500.
 
 ## Theme
 
@@ -117,9 +120,9 @@ python tools/build_prices.py phoenix
 
 | File | SHA-256 |
 |---|---|
-| `npcgil_phx.lua` | `06eaebba67ac390dc91beb7e300a7ab7101f8ec5ca821abd6c878d32a22a26b8` |
+| `npcgil_phx.lua` | `7dd57a31b21731e12f1684367db0ae847f95b0ec61013012a82cd073935ffa62` |
 | `session.lua` | `db208b896641a27518e05c5ec4c7a57c4ccaaa4322ba76eb54317a6561acafdd` |
-| `fame.lua` | `8193ad95598b08aa4d6d70fc89e92f113c340d67641b54418345fc0874f8d2cd` |
+| `fame.lua` | `ee5b1a2b96c97edb43a24a6bf689f9c75cbffe4d18bf6f79a4b9caf02199976b` |
 | `phxui.lua` | `807bae19ddfb7b541589c2baf008fa384689d79c25bdc4befcf8a1845a8c7a72` |
 | `data/prices.lua` | `fb408ff45bd9b98bb8157ea82c20b0307e4f464bdfbb2fcaa51c7f6fe7dff24e` |
 | `tools/build_prices.py` | `668ef7411c2496ec3d0dd44c4fce4e413f3dc15aecaef08dbb18de56fa0ed141` |
