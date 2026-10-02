@@ -1,6 +1,6 @@
 # PhoenixXI addons
 
-Ashita v4 addons made for the [Phoenix](https://phoenix-xi.com) FFXI server by Spongeh. Each addon
+Ashita v4 addons for the [Phoenix](https://phoenix-xi.com) FFXI server, made or ported by Spongeh. Each addon
 is published here when it's finished and submitted to Phoenix staff for review. Only use an
 addon once its exact version is listed as **Approved** below and on Phoenix's
 [approved addons list](https://phoenix-xi.com/approved-addons).
@@ -10,6 +10,7 @@ addon once its exact version is listed as **Approved** below and on Phoenix's
 | Addon | Version | Status | Submitted | Reviewed by | Notes |
 |---|---|---|---|---|---|
 | [npcgil-phx](addons/npcgil_phx) | 2.2.1 | Pending review | 2026-10-02 | | Display only, sends nothing |
+| [TradeNPC](addons/tradenpc) | 1.20.09.02-ashita.1 | Pending review | 2026-10-02 | | Sends the trade packet (0x036), only on command |
 
 Phoenix's rules treat any change to an addon's script as a new, unreviewed version. So every
 update gets a new version number and a new row here, and each addon's README lists a SHA-256 for
@@ -35,4 +36,5 @@ do (outgoing packets, commands, network access), plus the file hashes.
 
 ## License
 
-GPL-3.0 (see `LICENSE`). Price tables are generated from PhoenixXI's GPL-3.0 server repository.
+GPL-3.0 (see `LICENSE`) unless an addon's folder has its own license. TradeNPC keeps Ivaar's
+BSD 3-Clause license. Price tables are generated from PhoenixXI's GPL-3.0 server repository.
