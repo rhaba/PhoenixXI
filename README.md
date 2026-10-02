@@ -5,6 +5,8 @@ is published here when it's finished and submitted to Phoenix staff for review. 
 addon once its exact version is listed as **Approved** below and on Phoenix's
 [approved addons list](https://phoenix-xi.com/approved-addons).
 
+**Addons that aren't approved are removed from this repository.** Only approved addons stay.
+
 ## Approval by staff
 
 | Addon | Version | Status | Submitted | Reviewed by | Notes |
@@ -37,8 +39,8 @@ do (outgoing packets, commands, network access), plus the file hashes. Larger ad
 1. An addon is finished and tested elsewhere, then copied into `addons/<name>/`.
 2. Its version is added to the table above as **Pending review**, and the submission is tagged
    `<name>-v<version>`.
-3. When staff respond, the row is updated: **Approved**, **Approved with conditions** (the
-   conditions go in Notes) or **Not approved**.
+3. When staff respond, the row is updated to **Approved** or **Approved with conditions** (the
+   conditions go in Notes). An addon that isn't approved is removed from the repository.
 
 ## License
 
