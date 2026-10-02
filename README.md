@@ -11,7 +11,7 @@ addon once its exact version is listed as **Approved** below and on Phoenix's
 
 | Addon | Version | Status | Submitted | Reviewed by | Notes |
 |---|---|---|---|---|---|
-| [npcgil-phx](addons/npcgil_phx) | 2.2.2 | Pending review | 2026-10-02 | | Display only, sends nothing. Replaces 2.2.1, which was never reviewed. |
+| [npcgil-phx](addons/npcgil_phx) | 2.3.0 | Pending review | 2026-10-02 | | Display only, sends nothing. Adds quest turn-ins. Replaces 2.2.1 and 2.2.2, which were never reviewed. |
 | [craftguide](addons/craftguide) | 1.3.3 | Pending review | 2026-10-02 | | Display only, sends nothing. Replaces 1.3.1 and 1.3.2, which were never reviewed. |
 | [TradeNPC](addons/tradenpc) | 1.20.09.02-ashita.1 | Pending review | 2026-10-02 | | Sends the trade packet (0x036), only on command |
 | [enemybar](addons/enemybar) | 1.5.1 | Pending review | 2026-10-02 | | Display only, sends nothing. Port of enemybar2; distance display off by default |

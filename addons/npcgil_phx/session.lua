@@ -23,6 +23,10 @@
         0x029 battle message
             0x09 target server id (u32)     0x0D amount (u32)     0x19 message number (u16)
 
+    Items that a quest takes as a turn-in get a check in the Quest column; hovering it lists the
+    quests (data/quest_items.lua, built by tools/build_quest_items.py from the server's quest and
+    NPC scripts): who takes them, how many, the gil reward, and whether it can be repeated.
+
     The session and your fame levels are saved per character in their own settings file
     (session). Starting a new session keeps the fame levels.
 ]]
@@ -32,6 +36,8 @@ local chat     = require('chat');
 local imgui    = require('imgui');
 local prices   = require('data.prices');
 local fame     = require('fame');
+local okQuests, questItems = pcall(require, 'data.quest_items');
+if not okQuests or type(questItems) ~= 'table' then questItems = {}; end
 local ui       = require('phxui');
 
 local ALIAS = 'session';
@@ -57,6 +63,7 @@ local loot = {
     last_save   = 0,
     reset_armed = 0,
     show_fame   = false,
+    show_theme  = false,
 };
 
 -- Best price rank you can sell at, and where.
@@ -124,6 +131,23 @@ local function format_time(seconds)
     return string.format('%d:%02d:%02d', math.floor(seconds / 3600), math.floor(seconds / 60) % 60, seconds % 60);
 end
 
+-- One line per quest that takes this item: "3 to Parvipon (Southern San d'Oria): The Merchants Bidding".
+local function quest_lines(quests, have)
+    local out = {};
+    for _, q in ipairs(quests) do
+        local who = q.npc and (q.npc:find('^qm') and 'a ??? spot' or q.npc) or 'an NPC';
+        local line = string.format('%s  -  trade %d to %s', q.quest, q.qty, who);
+        if q.zone then line = line .. ' (' .. q.zone .. ')'; end
+        local extra = {};
+        if q.gil then extra[#extra + 1] = format_gil(q.gil) .. ' gil'; end
+        if q.repeatable then extra[#extra + 1] = 'repeatable'; end
+        if have and have >= q.qty then extra[#extra + 1] = 'you have enough'; end
+        if #extra > 0 then line = line .. '  [' .. table.concat(extra, ', ') .. ']'; end
+        out[#out + 1] = line;
+    end
+    return out;
+end
+
 -- Rows sorted by total value, plus the session totals.
 local function build_report()
     local rows = {};
@@ -135,7 +159,8 @@ local function build_report()
         if (item_id ~= nil) and (qty > 0) then
             local each = fame.sellPrice(prices[item_id], rank);
             local value = (each or 0) * qty;
-            rows[#rows + 1] = { name = item_name(item_id), qty = qty, each = each, value = value };
+            rows[#rows + 1] = { id = item_id, name = item_name(item_id), qty = qty, each = each, value = value,
+                                quests = questItems[item_id] };
             total = total + value;
             count = count + qty;
         end
@@ -187,6 +212,11 @@ function loot.Report()
     for _, row in ipairs(rows) do
         local each = row.each and (format_gil(row.each) .. ' ea') or 'not sellable';
         print(chat.header(addon.name):append(chat.message(string.format('  %s x%d  (%s)  %s', row.name, row.qty, each, format_gil(row.value)))));
+        if (row.quests ~= nil) then
+            for _, line in ipairs(quest_lines(row.quests, row.qty)) do
+                print(chat.header(addon.name):append(chat.message('      quest: ' .. line)));
+            end
+        end
     end
     local gil = loot.session.gil or 0;
     print(chat.header(addon.name):append(chat.message(string.format('  Gil looted: %s (from %d kills)',
@@ -240,6 +270,20 @@ local function player_name()
     return (ok and name ~= nil and name ~= '') and name or nil;
 end
 
+-- A small check mark drawn in the current table cell; brighter when you have enough for a turn-in.
+local function draw_check(enough)
+    local x, y = imgui.GetCursorScreenPos();
+    local h = imgui.GetTextLineHeight();
+    local c = enough and ui.color.ok or ui.color.gold;
+    local col = imgui.GetColorU32({ c[1], c[2], c[3], enough and 1.0 or 0.8 });
+    local dl = imgui.GetWindowDrawList();
+    local s = h * 0.62;
+    local x0, y0 = x + 4, y + h * 0.52;
+    dl:AddLine({ x0, y0 }, { x0 + s * 0.38, y0 + s * 0.36 }, col, 2.0);
+    dl:AddLine({ x0 + s * 0.38, y0 + s * 0.36 }, { x0 + s, y0 - s * 0.5 }, col, 2.0);
+    imgui.Dummy({ s + 8, h });
+end
+
 local function draw_body()
         local C = ui.color;
         local rows, total, count = build_report();
@@ -272,11 +316,12 @@ local function draw_body()
         ui.section(string.format('Items (%d)', count));
         if (#rows == 0) then
             imgui.TextColored(C.faint, 'Nothing won yet. Items you win from the treasure pool show up here.');
-        elseif (imgui.BeginTable('npcgil_phx_items', 4, bit.bor(ImGuiTableFlags_RowBg, ImGuiTableFlags_BordersInnerH, ImGuiTableFlags_SizingFixedFit))) then
+        elseif (imgui.BeginTable('npcgil_phx_items', 5, bit.bor(ImGuiTableFlags_RowBg, ImGuiTableFlags_BordersInnerH, ImGuiTableFlags_SizingFixedFit))) then
             imgui.TableSetupColumn('Item');
             imgui.TableSetupColumn('Qty');
             imgui.TableSetupColumn('Each');
             imgui.TableSetupColumn('Total');
+            imgui.TableSetupColumn('Quest');
             imgui.TableHeadersRow();
             for _, row in ipairs(rows) do
                 imgui.TableNextRow();
@@ -293,6 +338,17 @@ local function draw_body()
                 end
                 imgui.TableNextColumn();
                 imgui.TextColored(row.each and C.gold or C.faint, format_gil(row.value));
+                imgui.TableNextColumn();
+                if (row.quests ~= nil) then
+                    local enough = false;
+                    for _, q in ipairs(row.quests) do
+                        if row.qty >= q.qty then enough = true; end
+                    end
+                    draw_check(enough);
+                    if (imgui.IsItemHovered()) then
+                        imgui.SetTooltip('Quest turn-in:\n' .. table.concat(quest_lines(row.quests, row.qty), '\n'));
+                    end
+                end
             end
             imgui.EndTable();
         end
@@ -315,6 +371,21 @@ local function draw_body()
         imgui.SameLine();
         if (ui.toggle('Fame##npcgil_phx_fame', loot.show_fame)) then
             loot.show_fame = not loot.show_fame;
+        end
+        imgui.SameLine();
+        if (ui.toggle('Theme##npcgil_phx_theme', loot.show_theme)) then
+            loot.show_theme = not loot.show_theme;
+        end
+
+        if loot.show_theme then
+            ui.section('Theme');
+            imgui.PushItemWidth(160);
+            if ui.themeCombo('##npcgil_phx_theme_combo', loot.session.theme) then
+                loot.SetTheme(ui.theme);
+            end
+            imgui.PopItemWidth();
+            imgui.SameLine();
+            imgui.TextColored(C.muted, '(also: right-click the window, or /npcgil theme <name>)');
         end
 
         if loot.show_fame then

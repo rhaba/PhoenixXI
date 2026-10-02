@@ -93,7 +93,16 @@ Main files:
 
     dst = os.path.join(HERE, 'addons', a['folder'])
     if os.path.isdir(dst):
-        shutil.rmtree(dst)
+        # Remove the old files, then empty folders. A folder OneDrive (or an editor) holds open
+        # can't be removed on Windows; it is simply reused.
+        for dp, dn, fn in os.walk(dst, topdown=False):
+            for f in fn:
+                os.remove(os.path.join(dp, f))
+            if dp != dst:
+                try:
+                    os.rmdir(dp)
+                except OSError:
+                    pass
     for f in files + ['README.md', 'SHA256SUMS']:
         os.makedirs(os.path.dirname(os.path.join(dst, f)), exist_ok=True)
         shutil.copyfile(os.path.join(src, f), os.path.join(dst, f))
@@ -101,6 +110,75 @@ Main files:
 
 
 # ---------------------------------------------------------------------------------------------
+ADDONS['npcgil_phx'] = dict(
+    src='npcgil_phx', folder='npcgil_phx', version='2.3.0', submitted='2026-10-02',
+    note='Display only, sends nothing. Replaces 2.2.1 and 2.2.2, which were never reviewed. Adds quest turn-ins and a theme button.',
+    summary='**Author:** Spongeh. **Program:** Ashita v4. **Type:** display only. It reads data the client '
+            'already receives and never sends anything to the server.',
+    key_files=['npcgil_phx.lua', 'session.lua', 'fame.lua', 'phxui.lua', 'data/prices.lua', 'data/quest_items.lua',
+               'tools/build_prices.py', 'tools/build_quest_items.py'],
+    review='''
+### What it reads
+
+**Incoming packets.** It only listens; the packets are never changed or blocked.
+
+| Packet | Used for |
+|---|---|
+| 0x0D2 (item added to the treasure pool) | remembers which item is in which pool slot |
+| 0x0D3 (lot result) | counts an item only when the result is "won" by your own character |
+| 0x029 (battle message) with message 565 ("obtains gil") | adds your own share of gil from a kill |
+| 0x00A (zone in) | clears the remembered pool when you change zones |
+
+**Client memory and resources, through Ashita's API:**
+- your own party slot: your server id (to recognise your own wins) and name (shown in the window
+  header);
+- item names from the client's resource data.
+
+### What it writes
+
+- Its own settings file, through Ashita's settings library: the session tally, session time, fame
+  levels you typed in, and window theme.
+- Text to your own chat log, but only when you click **Report to chat** or use `/npcgil report`.
+  It isn't sent to any chat channel.
+
+### What it does NOT do
+
+- **No outgoing packets.** It has no `AddOutgoingPacket` call or any other packet injection.
+- **No commands.** No `QueueCommand` or automated chat or actions.
+- **No changes to incoming data.** No incoming packets are modified, blocked or injected.
+- **No network or file access** beyond Ashita's settings file. No sockets, HTTP or external
+  programs.
+- **No access** to other players' data beyond what the treasure-pool and battle packets already
+  show in your own log.
+
+### Data tables
+
+Both are fixed tables generated from PhoenixXI's public server repository. Nothing is looked up
+at run time.
+
+- `data/prices.lua`: base NPC sell prices from `sql/item_basic.sql` plus the module SQL in
+  `modules/init.txt` (Phoenix's pre-RMT vendor price reverts). The fame levels you type in only
+  change the displayed estimate.
+- `data/quest_items.lua` (new in 2.3.0): which quests take an item as a turn-in, read from the
+  trade checks in `scripts/quests/` and `scripts/zones/*/npcs/`, with the NPC, zone, quantity,
+  gil reward and whether it repeats. It is only shown in the window's tooltip and the chat report.
+
+To rebuild them:
+
+```
+git clone -b live https://github.com/phoenixffxi/Phoenix phoenix
+python tools/build_prices.py phoenix
+python tools/build_quest_items.py phoenix
+```
+
+### Changes since 2.2.2
+
+- `session.lua`: Quest column with a hover tooltip, quest lines in the chat report, a Theme
+  button next to Fame.
+- `data/quest_items.lua` and `tools/build_quest_items.py`: new.
+- `npcgil_phx.lua`: version and description.
+''')
+
 ADDONS['presence'] = dict(
     src='presence', folder='presence', version='2.0.0', submitted='2026-10-02',
     note='Display only, sends nothing to the game server. Updates your local Discord status.',

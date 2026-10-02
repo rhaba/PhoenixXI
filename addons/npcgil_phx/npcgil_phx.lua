@@ -2,14 +2,14 @@
     npcgil-phx for Ashita v4 - PhoenixXI
 
     Tallies the items you win from treasure pools and the gil you loot from kills during a farming
-    session, valued at what the best-paying NPC gives you for your fame. Standalone; the same
-    tracker is also VanaCompass - Phoenix's Loot Session window.
+    session, valued at what the best-paying NPC gives you for your fame, and flags items a quest
+    takes as a turn-in.
 ]]
 
 addon.name    = 'npcgil_phx';
 addon.author  = 'Spongeh';
-addon.version = '2.2.2';
-addon.desc    = 'Farming session tracker for PhoenixXI: treasure-pool loot at fame-adjusted NPC prices, plus gil looted from kills.';
+addon.version = '2.3.0';
+addon.desc    = 'Farming session tracker for PhoenixXI: treasure-pool loot at fame-adjusted NPC prices, quest turn-ins, plus gil looted from kills.';
 addon.link    = '';
 
 require('common');
