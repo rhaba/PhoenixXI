@@ -10,6 +10,7 @@ addon once its exact version is listed as **Approved** below and on Phoenix's
 | Addon | Version | Status | Submitted | Reviewed by | Notes |
 |---|---|---|---|---|---|
 | [npcgil-phx](addons/npcgil_phx) | 2.2.1 | Pending review | 2026-10-02 | | Display only, sends nothing |
+| [craftguide](addons/craftguide) | 1.3.1 | Pending review | 2026-10-02 | | Display only, sends nothing |
 | [TradeNPC](addons/tradenpc) | 1.20.09.02-ashita.1 | Pending review | 2026-10-02 | | Sends the trade packet (0x036), only on command |
 
 Phoenix's rules treat any change to an addon's script as a new, unreviewed version. So every
