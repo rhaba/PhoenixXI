@@ -8,7 +8,8 @@ else at runtime; this only runs when you refresh the data.
 
 Usage:
     pip install lupa
-    python tools/build_crafts.py --server <phoenix checkout> --shops <vanacompass_phoenix>/data [--era toau]
+    pip install lupa pyyaml
+    python tools/build_crafts.py --server <phoenix checkout> [--era toau] [--offline]
 
 Inputs:
   - sql/synth_recipes.sql: synthesis recipes (no desynthesis). Rows tagged with disabled content
@@ -20,8 +21,11 @@ Inputs:
     stock; items that restock are priced at their target stock (what the shelf settles to each
     day). Items with no starting stock and no restock only appear after players sell them, so they
     aren't counted.
-  - VanaCompass - Phoenix's data/shops.lua: regular NPC shops (fixed price), already extracted
-    from Phoenix's NPC scripts with its era stock changes.
+  - Regular NPC shops (fixed price), extracted here from Phoenix's NPC scripts, npcs.yaml and era
+    module overrides by tools/shops/generate_shops_phoenix.py. That generator came from VanaCompass -
+    Phoenix (GPL-3.0); its town-grid data is in tools/shops/grids.lua and grid_calibrations.lua.
+    Vendor grid squares fall back to BG-Wiki NPC pages, cached in tools/shops/bgwiki_cache
+    (--offline uses only the cache).
   - sql/item_basic.sql + module SQL: each item's base NPC sell price (NOSALE items excluded). The
     addon applies the player's fame at runtime.
   - NPC shop scripts and era module overrides: the fame area each shop prices by
@@ -104,9 +108,10 @@ def zone_display(folder):
 
 
 class Builder:
-    def __init__(self, root, shops_dir, era):
+    def __init__(self, root, era, offline=False):
         self.root = root
-        self.shops_dir = shops_dir
+        self.era = era
+        self.offline = offline
         last = len(EXPANSIONS) - 1 if era == 'all' else EXPANSIONS.index(era.upper())
         self.enabled = set(EXPANSIONS[:last + 1])
         self.lua = lupa.LuaRuntime()
@@ -325,23 +330,35 @@ class Builder:
                 })
         return offers
 
+    def shop_catalog(self):
+        """Regular NPC shop catalog: item id -> {'vendors': [{npc, zone, price, location, ...}]}."""
+        import sys
+        from pathlib import Path
+        shops_dir = Path(__file__).resolve().parent / 'shops'
+        sys.path.insert(0, str(shops_dir))
+        from phoenix_common import Phoenix
+        from generate_shops_phoenix import ShopBuilder, parse_sql_ids
+        root = Path(self.root)
+        px = Phoenix(root, self.era, {})
+        shops = ShopBuilder(px, shops_dir / 'bgwiki_cache', self.offline)
+        catalog = shops.build_shops(parse_sql_ids(root / 'sql/item_weapon.sql', 'item_weapon'),
+                                    parse_sql_ids(root / 'sql/item_equipment.sql', 'item_equipment'))
+        shops.fill_computed_grids(shops.shop_rows)
+        return catalog
+
     def regular_shops(self):
-        path = os.path.join(self.shops_dir, 'shops.lua')
         offers = defaultdict(list)
-        if not os.path.exists(path):
-            print('warning: no VanaCompass shops.lua; regular NPC shops left out')
-            return offers
-        data = self.lua.execute(open(path, encoding='utf-8').read())
+        data = self.shop_catalog()
         fame = self.shop_fame()
         self.fame_misses = set()
         for item, entry in data.items():
-            for v in entry['vendors'].values():
-                if v['price']:
+            for v in entry['vendors']:
+                if v.get('price'):
                     area = fame.get((name_key(v['zone']), name_key(v['npc'])))
                     if area is None:
                         self.fame_misses.add(f"{v['npc']} ({v['zone']})")
                     offers[int(item)].append({'price': int(v['price']), 'npc': v['npc'], 'zone': v['zone'],
-                                              'loc': v['location'] or '', 'kind': 'shop', 'fame': area or ''})
+                                              'loc': v.get('location') or '', 'kind': 'shop', 'fame': area or ''})
         return offers
 
     # ---- fishing ------------------------------------------------------------------------------
@@ -406,7 +423,7 @@ class Builder:
                 continue
             priced += 1
             parts = []
-            for o in sorted(offers, key=lambda o: o['price'])[:8]:
+            for o in sorted(offers, key=lambda o: (o['price'], o['kind'], o['npc'], o['zone']))[:8]:
                 fields = [f"price = {o['price']}", f"npc = {lua_str(o['npc'])}", f"zone = {lua_str(o['zone'])}", f"kind = {lua_str(o['kind'])}"]
                 for key in ('loc', 'craft', 'rank', 'region', 'nation', 'fame', 'hours', 'holiday'):
                     if o.get(key) not in (None, ''):
@@ -472,12 +489,12 @@ class Builder:
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--server', required=True)
-    ap.add_argument('--shops', required=True, help="VanaCompass - Phoenix's data folder (for shops.lua)")
     ap.add_argument('--era', default='toau')
+    ap.add_argument('--offline', action='store_true', help='use only cached BG-Wiki pages for vendor grids')
     args = ap.parse_args()
     out_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
     os.makedirs(out_dir, exist_ok=True)
-    Builder(args.server, args.shops, args.era).build(out_dir)
+    Builder(args.server, args.era, args.offline).build(out_dir)
 
 
 if __name__ == '__main__':

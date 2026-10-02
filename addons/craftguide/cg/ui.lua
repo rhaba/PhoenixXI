@@ -481,7 +481,7 @@ local function renderSettings(ctx)
 
     ui.section('Data');
     imgui.TextColored(DIM, 'PhoenixXI server (recipes, guild shops, regional vendors, fishing, item prices);');
-    imgui.TextColored(DIM, 'regular NPC shop list from VanaCompass - Phoenix. Nothing is read from other addons at runtime.');
+    imgui.TextColored(DIM, 'regular NPC shops extracted from its NPC scripts. Nothing is read from other addons.');
 end
 
 -- ---------------------------------------------------------------------------

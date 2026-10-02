@@ -10,7 +10,7 @@
 
 addon.name    = 'craftguide';
 addon.author  = 'Spongeh';
-addon.version = '1.3.2';
+addon.version = '1.3.3';
 addon.desc    = 'Cheapest NPC-material crafting paths, rank tests and a fishing guide for PhoenixXI.';
 addon.link    = '';
 
