@@ -12,6 +12,9 @@ addon once its exact version is listed as **Approved** below and on Phoenix's
 | [npcgil-phx](addons/npcgil_phx) | 2.2.2 | Pending review | 2026-10-02 | | Display only, sends nothing. Replaces 2.2.1, which was never reviewed. |
 | [craftguide](addons/craftguide) | 1.3.3 | Pending review | 2026-10-02 | | Display only, sends nothing. Replaces 1.3.1 and 1.3.2, which were never reviewed. |
 | [TradeNPC](addons/tradenpc) | 1.20.09.02-ashita.1 | Pending review | 2026-10-02 | | Sends the trade packet (0x036), only on command |
+| [enemybar](addons/enemybar) | 1.5.1 | Pending review | 2026-10-02 | | Display only, sends nothing. Port of enemybar2; distance display off by default |
+| [presence](addons/presence) | 2.0.0 | Pending review | 2026-10-02 | | Sends nothing to the game server. Updates your local Discord status |
+| [tTimers (party fork)](addons/ttimers) | 0.25-party.5 | Pending review | 2026-10-02 | | Fork of approved tTimers 0.25: party job ability recasts, theme, skin |
 
 Phoenix's rules treat any change to an addon's script as a new, unreviewed version. So every
 update gets a new version number and a new row here, and each addon's README lists a SHA-256 for
@@ -25,7 +28,9 @@ Copy an addon's folder from `addons/` into `<Ashita>/addons/`, then `/addon load
 
 Each addon's README starts with its own approval header, then a **For reviewers** section. That
 section lists exactly which packets and game data it reads, what it writes, and what it does not
-do (outgoing packets, commands, network access), plus the file hashes.
+do (outgoing packets, commands, network access), plus the file hashes. Larger addons also ship a
+`SHA256SUMS` file covering every file, so you can check a copy with `sha256sum -c SHA256SUMS`.
+`tools/publish.py` generates the headers, reviewer sections and SHA256SUMS.
 
 ## How this repository works
 

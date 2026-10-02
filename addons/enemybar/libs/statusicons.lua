@@ -1,0 +1,321 @@
+--[[
+* XIUI Status Icons Utilities
+* Drawing status/buff/debuff icons
+]]--
+
+require('common');
+local imgui = require('imgui');
+local imtext = require('libs.imtext');
+
+local M = {};
+
+-- ========================================
+-- Status Reordering (debuffs closest to party frame)
+-- ========================================
+
+-- Reusable tables to avoid allocations every frame
+local reorderedStatuses = {};
+local reorderedTimes = {};
+
+-- Reorder status IDs so debuffs are closest to the party frame
+-- @param statusIds: array of status IDs
+-- @param buffTableLib: the bufftable module with IsBuff function
+-- @param statusSide: 0 = Left (debuffs on right), 1 = Right (debuffs on left)
+-- @param statusTimes: optional array of status times (parallel to statusIds)
+-- @return: reordered array with debuffs positioned closest to party frame, and optionally reordered times
+function M.ReorderForStatusSide(statusIds, buffTableLib, statusSide, statusTimes)
+    if statusIds == nil or #statusIds == 0 then
+        return statusIds, statusTimes;
+    end
+
+    -- Clear reusable tables
+    for k in pairs(reorderedStatuses) do reorderedStatuses[k] = nil; end
+    if statusTimes then
+        for k in pairs(reorderedTimes) do reorderedTimes[k] = nil; end
+    end
+
+    local debuffIdx = 1;
+    local buffIdx = 1;
+    local debuffs = {};
+    local buffs = {};
+    local debuffTimes = {};
+    local buffTimes = {};
+
+    -- Separate debuffs and buffs (and their times if provided)
+    for i = 1, #statusIds do
+        local id = statusIds[i];
+        if id == -1 or id == 255 then
+            break;
+        end
+        if buffTableLib.IsBuff(id) then
+            buffs[buffIdx] = id;
+            if statusTimes then
+                buffTimes[buffIdx] = statusTimes[i];
+            end
+            buffIdx = buffIdx + 1;
+        else
+            debuffs[debuffIdx] = id;
+            if statusTimes then
+                debuffTimes[debuffIdx] = statusTimes[i];
+            end
+            debuffIdx = debuffIdx + 1;
+        end
+    end
+
+    -- Order based on statusSide so debuffs are always closest to party frame
+    -- statusSide 0 (Left): icons to left of party frame, debuffs should be rightmost (last)
+    --                      Also reverse debuff order so first debuff is rightmost
+    -- statusSide 1 (Right): icons to right of party frame, debuffs should be leftmost (first)
+    local idx = 1;
+    if statusSide == 0 then
+        -- Left side: buffs first (left), debuffs last in reverse order (right, closer to party frame)
+        -- Reverse buffs so first buff is closest to debuffs
+        for i = #buffs, 1, -1 do
+            reorderedStatuses[idx] = buffs[i];
+            if statusTimes then
+                reorderedTimes[idx] = buffTimes[i];
+            end
+            idx = idx + 1;
+        end
+        -- Reverse debuffs so first debuff (e.g. poison) is rightmost (closest to party frame)
+        for i = #debuffs, 1, -1 do
+            reorderedStatuses[idx] = debuffs[i];
+            if statusTimes then
+                reorderedTimes[idx] = debuffTimes[i];
+            end
+            idx = idx + 1;
+        end
+    else
+        -- Right side: debuffs first (left, closer to party frame), buffs last (right)
+        for i = 1, #debuffs do
+            reorderedStatuses[idx] = debuffs[i];
+            if statusTimes then
+                reorderedTimes[idx] = debuffTimes[i];
+            end
+            idx = idx + 1;
+        end
+        for i = 1, #buffs do
+            reorderedStatuses[idx] = buffs[i];
+            if statusTimes then
+                reorderedTimes[idx] = buffTimes[i];
+            end
+            idx = idx + 1;
+        end
+    end
+
+    if statusTimes then
+        return reorderedStatuses, reorderedTimes;
+    end
+    return reorderedStatuses;
+end
+
+-- Convenience wrapper for debuffs-first ordering (for target bar, etc.)
+function M.ReorderDebuffsFirst(statusIds, buffTableLib, statusTimes)
+    return M.ReorderForStatusSide(statusIds, buffTableLib, 1, statusTimes);
+end
+
+-- Reusable tables for buffs-closest ordering
+local reorderedStatusesBuffs = {};
+local reorderedTimesBuffs = {};
+
+-- Reorder status IDs so buffs are closest to the party frame (opposite of ReorderForStatusSide)
+-- @param statusIds: array of status IDs
+-- @param buffTableLib: the bufftable module with IsBuff function
+-- @param statusSide: 0 = Left (buffs on right), 1 = Right (buffs on left)
+-- @param statusTimes: optional array of status times (parallel to statusIds)
+-- @return: reordered array with buffs positioned closest to party frame, and optionally reordered times
+function M.ReorderBuffsClosest(statusIds, buffTableLib, statusSide, statusTimes)
+    if statusIds == nil or #statusIds == 0 then
+        return statusIds, statusTimes;
+    end
+
+    -- Clear reusable tables
+    for k in pairs(reorderedStatusesBuffs) do reorderedStatusesBuffs[k] = nil; end
+    if statusTimes then
+        for k in pairs(reorderedTimesBuffs) do reorderedTimesBuffs[k] = nil; end
+    end
+
+    local debuffIdx = 1;
+    local buffIdx = 1;
+    local debuffs = {};
+    local buffs = {};
+    local debuffTimes = {};
+    local buffTimes = {};
+
+    -- Separate debuffs and buffs (and their times if provided)
+    for i = 1, #statusIds do
+        local id = statusIds[i];
+        if id == -1 or id == 255 then
+            break;
+        end
+        if buffTableLib.IsBuff(id) then
+            buffs[buffIdx] = id;
+            if statusTimes then
+                buffTimes[buffIdx] = statusTimes[i];
+            end
+            buffIdx = buffIdx + 1;
+        else
+            debuffs[debuffIdx] = id;
+            if statusTimes then
+                debuffTimes[debuffIdx] = statusTimes[i];
+            end
+            debuffIdx = debuffIdx + 1;
+        end
+    end
+
+    -- Order based on statusSide so buffs are always closest to party frame
+    -- statusSide 0 (Left): icons to left of party frame, buffs should be rightmost (last)
+    -- statusSide 1 (Right): icons to right of party frame, buffs should be leftmost (first)
+    local idx = 1;
+    if statusSide == 0 then
+        -- Left side: debuffs first (left, far), buffs last in reverse order (right, closer to party frame)
+        for i = #debuffs, 1, -1 do
+            reorderedStatusesBuffs[idx] = debuffs[i];
+            if statusTimes then
+                reorderedTimesBuffs[idx] = debuffTimes[i];
+            end
+            idx = idx + 1;
+        end
+        -- Reverse buffs so first buff is rightmost (closest to party frame)
+        for i = #buffs, 1, -1 do
+            reorderedStatusesBuffs[idx] = buffs[i];
+            if statusTimes then
+                reorderedTimesBuffs[idx] = buffTimes[i];
+            end
+            idx = idx + 1;
+        end
+    else
+        -- Right side: buffs first (left, closer to party frame), debuffs last (right)
+        for i = 1, #buffs do
+            reorderedStatusesBuffs[idx] = buffs[i];
+            if statusTimes then
+                reorderedTimesBuffs[idx] = buffTimes[i];
+            end
+            idx = idx + 1;
+        end
+        for i = 1, #debuffs do
+            reorderedStatusesBuffs[idx] = debuffs[i];
+            if statusTimes then
+                reorderedTimesBuffs[idx] = debuffTimes[i];
+            end
+            idx = idx + 1;
+        end
+    end
+
+    if statusTimes then
+        return reorderedStatusesBuffs, reorderedTimesBuffs;
+    end
+    return reorderedStatusesBuffs;
+end
+
+
+local debuff_font_settings = T{
+    font_height = 14,
+    font_color = 0xFFFFFFFF,
+    font_flags = 1,
+    outline_width = 2,
+};
+
+-- ========================================
+-- Status Icon Drawing
+-- ========================================
+
+-- Draw status icons with optional backgrounds, timers, and uncertain markers
+-- @param statusIds: array of status IDs to draw
+-- @param iconSize: size of each icon in pixels
+-- @param maxColumns: max icons per row
+-- @param maxRows: max rows to display
+-- @param drawBg: whether to draw background behind icons
+-- @param xOffset: horizontal offset for positioning
+-- @param buffTimes: optional array of remaining buff times
+-- @param settings: optional font settings override
+-- @param statusHandler: the statushandler module
+-- @param buffTable: the bufftable module
+-- @param uncertainFlags: optional map [buffId]=true for inferred (hit, hidden resist) debuffs
+function M.DrawStatusIcons(statusIds, iconSize, maxColumns, maxRows, drawBg, xOffset, buffTimes, settings, statusHandler, buffTableLib, uncertainFlags)
+    if (statusIds ~= nil and #statusIds > 0) then
+        -- Draw onto the same list as window bgs so icons aren't hidden behind them.
+        local drawList = GetUIDrawList();
+        local currentRow = 1;
+        local currentColumn = 0;
+        if (xOffset ~= nil) then
+            imgui.SetCursorPosX(imgui.GetCursorPosX() + xOffset);
+        end
+        for i = 1, #statusIds do
+            -- Don't check anymore after -1, as it will be all -1's
+            if (statusIds[i] == -1) then
+                break;
+            end
+            local icon = statusHandler.get_icon_from_theme(gConfig.statusIconTheme, statusIds[i]);
+            if (icon ~= nil) then
+                if (drawBg == true) then
+                    local resetX, resetY = imgui.GetCursorScreenPos();
+                    local isBuff = buffTableLib.IsBuff(statusIds[i]);
+                    local bgSize = iconSize * 1.1;
+                    local yOffset = isBuff and (bgSize * -0.3) or (bgSize * -0.1);
+                    local bgX = resetX - ((bgSize - iconSize) / 1.5);
+                    local bgY = resetY + yOffset;
+                    drawList:AddImage(statusHandler.GetBackground(isBuff),
+                        {bgX, bgY}, {bgX + bgSize + 1, bgY + bgSize / 0.75});
+                end
+                local iconPosX, iconPosY = imgui.GetCursorScreenPos();
+                drawList:AddImage(icon, {iconPosX, iconPosY}, {iconPosX + iconSize, iconPosY + iconSize}, {0, 0}, {1, 1}, 0xFFFFFFFF);
+                local isUncertain = gConfig.showUncertainDebuffMarker and uncertainFlags and uncertainFlags[statusIds[i]];
+                if isUncertain then
+                    local r = math.max(5, iconSize * 0.26);
+                    local cx = iconPosX + iconSize - r * 0.45;
+                    local cy = iconPosY + r * 0.45;
+                    drawList:AddCircleFilled({cx, cy}, r + 1, imgui.GetColorU32({0, 0, 0, 0.85}), 16);
+                    drawList:AddCircleFilled({cx, cy}, r, imgui.GetColorU32({1.0, 0.78, 0.12, 0.95}), 16);
+                    local mark = '?';
+                    local markSize = math.max(8, r * 1.55);
+                    imtext.SetConfig(gConfig.fontFamily, true, 0);
+                    local markW, markH = imtext.Measure(mark, markSize);
+                    local markX = cx - markW / 2;
+                    local markY = cy - markH * 0.58;
+                    local markCol = 0xF2181408;
+                    imtext.DrawSimple(drawList, mark, markX + 1, markY, markCol, markSize);
+                    imtext.DrawSimple(drawList, mark, markX, markY, markCol, markSize);
+                end
+                imgui.Dummy({iconSize, iconSize});
+                if buffTimes ~= nil and buffTimes[i] ~= nil then
+                    local font_base = settings or debuff_font_settings;
+                    -- When no explicit font settings are provided (target bar buffs, pet bar buffs)
+                    -- honor the global Font Outline slider so timer text matches the rest of the UI.
+                    local outlineW = (not settings and gConfig and gConfig.fontOutlineWidth)
+                        or font_base.outline_width or 2;
+                    imtext.SetConfig(gConfig.fontFamily, bit.band(font_base.font_flags or 0, 1) ~= 0, outlineW);
+                    local textPosX = iconPosX + iconSize / 2;
+                    local textPosY = iconPosY + iconSize;
+                    local timerText = tostring(buffTimes[i]);
+                    -- Raw gConfig.targetBarIconFontSize needs gs scaling; font_base.font_height is from
+                    -- gAdjustedSettings (already scaled in updater).
+                    local gs = gConfig.globalScale or 1.0;
+                    local scaledFontHeight = (gConfig.targetBarIconFontSize and gConfig.targetBarIconFontSize * gs) or font_base.font_height;
+                    local timerW, _ = imtext.Measure(timerText, scaledFontHeight);
+                    local timerColor = font_base.font_color or 0xFFFFFFFF;
+                    imtext.Draw(drawList, timerText, textPosX - timerW / 2, textPosY, timerColor, scaledFontHeight);
+                end
+                if (imgui.IsItemHovered()) then
+                    statusHandler.render_tooltip(statusIds[i]);
+                end
+                currentColumn = currentColumn + 1;
+                -- Handle multiple rows
+                if (currentColumn < maxColumns) then
+                    imgui.SameLine();
+                else
+                    currentRow = currentRow + 1;
+                    if (currentRow > maxRows) then
+                        return;
+                    end
+                    if (xOffset ~= nil) then
+                        imgui.SetCursorPosX(imgui.GetCursorPosX() + xOffset);
+                    end
+                    currentColumn = 0;
+                end
+            end
+        end
+    end
+end
+
+return M;

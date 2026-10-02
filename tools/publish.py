@@ -1,0 +1,268 @@
+"""
+Publish an addon into this repository for staff review.
+
+    python tools/publish.py <addon key>
+
+For each addon in ADDONS below:
+  1. writes SHA256SUMS in the addon's source folder (every published file except README.md and
+     SHA256SUMS itself);
+  2. puts the "Approval by staff" header at the top of the source README and the "For reviewers"
+     section at the bottom (replacing earlier copies), including the SHA-256 of SHA256SUMS and of
+     the main code files;
+  3. copies the published files to addons/<folder>/ (byte for byte).
+Then add or update the row in the root README and tag the commit.
+"""
+
+import fnmatch, hashlib, os, re, shutil, sys
+
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SRC_ROOT = os.path.dirname(HERE)
+
+HEADER_START = '<!-- staff-approval -->'
+HEADER_END = '<!-- /staff-approval -->'
+REVIEW_START = '<!-- for-reviewers -->'
+
+ADDONS = {}
+
+
+def sha(path):
+    return hashlib.sha256(open(path, 'rb').read()).hexdigest()
+
+
+def published_files(src, exclude):
+    out = []
+    for dp, dn, fn in os.walk(src):
+        dn[:] = sorted(d for d in dn if d not in ('.git', '__pycache__'))
+        for f in sorted(fn):
+            rel = os.path.relpath(os.path.join(dp, f), src).replace(os.sep, '/')
+            if any(fnmatch.fnmatch(rel, pat) for pat in exclude):
+                continue
+            out.append(rel)
+    return out
+
+
+def publish(key):
+    a = ADDONS[key]
+    src = os.path.join(SRC_ROOT, a['src'])
+    exclude = ['README.md', 'SHA256SUMS', '.gitignore', '.gitattributes', '.gitmodules', '*.zip'] + a.get('exclude', [])
+    files = published_files(src, exclude)
+    sums = ''.join(f'{sha(os.path.join(src, f))}  {f}\n' for f in files)
+    with open(os.path.join(src, 'SHA256SUMS'), 'w', encoding='utf-8', newline='\n') as fh:
+        fh.write(sums)
+    sums_hash = sha(os.path.join(src, 'SHA256SUMS'))
+
+    readme_path = os.path.join(src, 'README.md')
+    readme = open(readme_path, encoding='utf-8').read().replace('\r\n', '\n')
+    readme = re.sub(re.escape(HEADER_START) + r'.*?' + re.escape(HEADER_END) + r'\n*(?:---\n+)*', '', readme, flags=re.S)
+    if REVIEW_START in readme:
+        readme = readme[:readme.index(REVIEW_START)].rstrip() + '\n'
+    title, _, body = readme.partition('\n')
+    header = f'''{HEADER_START}
+## Approval by staff
+
+| Version | Status | Submitted | Reviewed by | Notes |
+|---|---|---|---|---|
+| {a["version"]} | Pending review | {a["submitted"]} | | {a["note"]} |
+
+{a["summary"]}
+{HEADER_END}
+
+---
+
+'''
+    rows = '\n'.join(f'| `{f}` | `{sha(os.path.join(src, f))}` |' for f in a['key_files'])
+    review = f'''{REVIEW_START}
+## For reviewers
+
+{a["review"].strip()}
+
+### Files in the reviewed version
+
+`SHA256SUMS` lists the SHA-256 of every file in this version ({len(files)} files).
+Its own SHA-256 is `{sums_hash}`.
+
+Main files:
+
+| File | SHA-256 |
+|---|---|
+{rows}
+'''
+    readme = title + '\n\n' + header + body.lstrip('\n').rstrip() + '\n\n' + review
+    with open(readme_path, 'w', encoding='utf-8', newline='\n') as fh:
+        fh.write(readme)
+
+    dst = os.path.join(HERE, 'addons', a['folder'])
+    if os.path.isdir(dst):
+        shutil.rmtree(dst)
+    for f in files + ['README.md', 'SHA256SUMS']:
+        os.makedirs(os.path.dirname(os.path.join(dst, f)), exist_ok=True)
+        shutil.copyfile(os.path.join(src, f), os.path.join(dst, f))
+    print(f'{key}: {len(files)} files, SHA256SUMS {sums_hash[:16]}')
+
+
+# ---------------------------------------------------------------------------------------------
+ADDONS['presence'] = dict(
+    src='presence', folder='presence', version='2.0.0', submitted='2026-10-02',
+    note='Display only, sends nothing to the game server. Updates your local Discord status.',
+    summary='**Author:** Spongeh. **Program:** Ashita v4. **Type:** Discord Rich Presence. It shows '
+            'your job and zone as your Discord "Playing ..." status, and never sends anything to the '
+            'game server.',
+    key_files=['presence.lua'],
+    review='''
+### What it reads
+
+- **No packets** of any kind.
+- **Client memory, through Ashita's API:**
+  - **your own party slot (index 0):** whether you're logged in, your name and your zone. The
+    name is used only to detect login, logout and character changes, and is never sent anywhere;
+  - **your own player data:** main and sub job and their levels;
+  - **zone names** from the client's resource data.
+
+It checks these at most once every 2 seconds.
+
+### What it writes
+
+- **Its own settings file,** through Ashita's settings library: your Discord application id, the
+  on/off switches and the optional icon key.
+- **Your local Discord client,** over Discord's local IPC named pipe (`\\\\.\\pipe\\discord-ipc-N`),
+  the same mechanism games use for Rich Presence. It sends the handshake and a `SET_ACTIVITY`
+  with:
+  - your main/sub job and levels (if enabled);
+  - your zone name (if enabled);
+  - a session start time;
+  - the optional icon.
+
+  On logout or unload it clears the activity. This is local to your PC. It isn't a network
+  request from the addon, and it posts no messages to any Discord channel.
+
+### What it does NOT do
+
+- **No game traffic:** no outgoing or incoming game packets are sent, read, modified or
+  blocked.
+- **No commands:** no `QueueCommand` or automated chat or actions.
+- **No other network or file access:** no HTTP, sockets, bots or webhooks. The only I/O is the
+  local Discord pipe and its own settings file.
+- **No other players' data:** only your own character.
+
+`branding/phoenix_presence_logo.png` is an optional image you can upload to your own Discord
+application as the status icon. It's original artwork, not Phoenix's logo.
+''')
+
+ADDONS['enemybar'] = dict(
+    src='enemybar', folder='enemybar', version='1.5.1', submitted='2026-10-02',
+    note='Display only, sends nothing. Distance display off by default (enemybar2 condition).',
+    summary='**Author:** mmckee and akaden (enemybar2, BSD 3-Clause); XIUI authors (debuff tracking, '
+            'GPL-3.0); Ashita port by Spongeh. **Program:** Ashita v4. **Type:** display only. Enemy '
+            'HP bars with buff and debuff timers; it never sends anything to the server.',
+    key_files=['enemybar.lua', 'eb/render.lua', 'eb/tracker.lua', 'eb/resists.lua', 'eb/configui.lua', 'eb/defaults.lua',
+               'eb/ekg.lua', 'eb/hearts.lua', 'eb/ff9.lua', 'eb/util.lua', 'phxui.lua', 'handlers/debuffhandler.lua',
+               'handlers/enemycasts.lua', 'handlers/actiontracker.lua', 'handlers/statushandler.lua', 'libs/packets.lua'],
+    review='''
+### Relationship to approved addons
+
+This is an Ashita v4 port of **enemybar2**, which is approved for Windower **with distance
+display off**. Here the distance display is **off by default**, and a one-time update turns it off
+for existing settings. It's still a per-bar option in `/eb`, so staff can require it locked off.
+
+Buff and debuff tracking comes from **XIUI**, which is approved for Ashita.
+
+### What it reads
+
+**Incoming packets.** It only listens; the packets are never changed or blocked.
+
+| Packet | Used for |
+|---|---|
+| 0x028 (action) | which mob is acting on whom (target of target), spells and TP moves being readied, debuffs landing |
+| 0x029 (battle message) | debuffs wearing off, resists, interrupted casts |
+| 0x00E (NPC/mob update) | the entity cache used by the debuff tracker |
+| 0x00A / 0x00B (zone in / out) | clearing all tracked state when you zone |
+| 0x0DD (party member update) | refreshing the party list (to tell party and alliance claims apart) |
+| 0x08C / 0x08D (merits / job points) | your own merits that lengthen debuff durations (from XIUI) |
+
+**Client memory, through Ashita's API:**
+- entities you can already see: name, HP %, distance, claim id and status;
+- your target and sub-target;
+- party and alliance member ids and names.
+
+**Files:** if MobDB is installed in `addons/mobdb`, it reads MobDB's own per-zone data files
+(read only) to show weaknesses and immunities. Icons come from its own `assets` folder.
+
+### What it writes
+
+- **Its own settings file,** through Ashita's settings library.
+- **Chat:** text to your own chat log, only from its `/eb` commands.
+
+### What it does NOT do
+
+- **No outgoing packets.** It has no `AddOutgoingPacket` call or any other packet injection.
+- **No commands:** no `QueueCommand`, no targeting, and no automated actions. `e.blocked` is
+  used only to consume its own `/eb` command.
+- **No changes to incoming data.** No incoming packets are modified, blocked or injected.
+- **No network access.** File access is limited to its settings, its own assets and MobDB's data
+  files (read only).
+- **No hidden information:** it shows only what your client already receives, the same data
+  XIUI's target bar uses.
+''')
+
+ADDONS['ttimers'] = dict(
+    src='ttimers', folder='ttimers', version='0.25-party.5', submitted='2026-10-02',
+    note='Fork of approved tTimers 0.25. Adds party job ability recasts, a theme and a skin.',
+    summary='**Author:** Thorny (tTimers, MIT); party tracker, theme and Farplane IX skin by Spongeh. '
+            '**Program:** Ashita v4. **Type:** display only: timer panels. It is a fork of tTimers 0.25, '
+            'which is approved.',
+    exclude=[],
+    key_files=['ttimers.lua', 'initializer.lua', 'callbacks.lua', 'config.lua', 'blockeditor.lua', 'trackers/party.lua',
+               'data/partyrecasts.lua', 'durations/songs.lua', 'durations/data.lua', 'phxui.lua',
+               'resources/skins/classic/farplane9.lua', 'resources/skins/classic/farplane9_bottom_justified.lua',
+               'gdifonts/gdifonttexture.dll'],
+    review='''
+### Changes from stock tTimers 0.25
+
+Compared file by file with the stock 0.25 release, ignoring line endings:
+
+| | Files |
+|---|---|
+| **Changed** | `ttimers.lua` (version), `initializer.lua` (party panel, theme and skin settings), `callbacks.lua` (`/tt theme`), `config.lua` and `blockeditor.lua` (themed settings window, Party tab), `durations/songs.lua` (a stray `;` after a function header stopped song durations from loading), `README.md` |
+| **Added** | `trackers/party.lua` and `data/partyrecasts.lua` (party job ability recasts), `phxui.lua` (window theme), `resources/skins/classic/farplane9*.lua` with two textures (a skin), `tools/build_party_recasts.py` and `tools/make_farplane9_skin.py` (data generators, not loaded in game) |
+| **Removed** | `.gitmodules` |
+
+Everything else, including `gdifonts/gdifonttexture.dll`, is byte-identical to stock 0.25. The DLL
+is Thorny's GDI font renderer.
+
+### The party tracker (new)
+
+It listens to incoming **0x028 (action)** packets for job abilities used by your party (and,
+optionally, alliance) members. It then starts a timer using that ability's recast from
+`data/partyrecasts.lua`, a fixed table generated from PhoenixXI's public server data. It reads
+member ids, names and main jobs through Ashita's party API. It sends nothing and blocks nothing.
+
+### Behaviour inherited from stock tTimers (unchanged)
+
+- **Incoming packets** are read for buffs, debuffs and recasts (0x028, 0x029, 0x063, 0x076, 0x0DD
+  and others). They are never modified or blocked.
+- **Outgoing packets.** Stock `durations/data.lua` sends two menu requests:
+  - **0x061** (main menu) and **0xC0** (job point menu), to read job point totals;
+  - only when your main job is **level 99** and you have the **Job Points key item (2544)**.
+
+  That can't happen at PhoenixXI's level cap, so in practice nothing is sent. The code is
+  unchanged from the approved release.
+- **Mouse clicks.** Ctrl+click and Shift+click on a timer remove that timer from the display. The
+  click is consumed (`e.blocked`) so it doesn't fall through to the game. This **does not cancel
+  any buff in game**; no packet or command is sent.
+- **Debug file dumps** in `durations/include.lua` are behind `debugMode = false` and never run.
+
+### What it writes
+
+- **Its own settings file,** through Ashita's settings library.
+- **Chat:** text to your own chat log, from its commands.
+
+### What it does NOT do
+
+- **No commands:** no `QueueCommand` or automated actions.
+- **No network access.**
+''')
+
+
+if __name__ == '__main__':
+    for k in sys.argv[1:] or ADDONS:
+        publish(k)
