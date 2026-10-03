@@ -16,6 +16,16 @@ test checklist, your craft skills (including decimals) and a fishing guide.
 
 `/addon load craftguide`, then `/cg`.
 
+## Screenshots
+
+![A craft tab: the cheapest path to the target level, with what to buy, how many and where.](screenshots/craftguide_plan.png)
+
+*A craft tab: the cheapest path to the target level, with what to buy, how many and where.*
+
+![The Fishing tab: fish by skill with their NPC price, where to catch them and the best bait.](screenshots/craftguide_fishing.png)
+
+*The Fishing tab: fish by skill with their NPC price, where to catch them and the best bait.*
+
 ## Craft tabs
 
 There's one tab for each craft: Woodworking, Smithing, Goldsmithing, Clothcraft,

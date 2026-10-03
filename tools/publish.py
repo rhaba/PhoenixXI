@@ -45,7 +45,10 @@ def publish(key):
     a = ADDONS[key]
     src = os.path.join(SRC_ROOT, a['src'])
     exclude = ['README.md', 'SHA256SUMS', '.gitignore', '.gitattributes', '.gitmodules', '*.zip'] + a.get('exclude', [])
-    files = published_files(src, exclude)
+    # screenshots/ holds the README's images: published, but not part of the addon, so they
+    # stay out of SHA256SUMS (adding a screenshot doesn't change the reviewed files)
+    files = published_files(src, exclude + ['screenshots/*'])
+    docs = [f for f in published_files(src, exclude) if f.startswith('screenshots/')]
     sums = ''.join(f'{sha(os.path.join(src, f))}  {f}\n' for f in files)
     with open(os.path.join(src, 'SHA256SUMS'), 'w', encoding='utf-8', newline='\n') as fh:
         fh.write(sums)
@@ -71,6 +74,8 @@ def publish(key):
 
 '''
     rows = '\n'.join(f'| `{f}` | `{sha(os.path.join(src, f))}` |' for f in a['key_files'])
+    docs_note = (" The README's images in `screenshots/` aren't part of the addon and aren't listed."
+                 if docs else '')
     review = f'''{REVIEW_START}
 ## For reviewers
 
@@ -78,7 +83,7 @@ def publish(key):
 
 ### Files in the reviewed version
 
-`SHA256SUMS` lists the SHA-256 of every file in this version ({len(files)} files).
+`SHA256SUMS` lists the SHA-256 of every file in this version ({len(files)} files).{docs_note}
 Its own SHA-256 is `{sums_hash}`.
 
 Main files:
@@ -103,7 +108,7 @@ Main files:
                     os.rmdir(dp)
                 except OSError:
                     pass
-    for f in files + ['README.md', 'SHA256SUMS']:
+    for f in files + docs + ['README.md', 'SHA256SUMS']:
         os.makedirs(os.path.dirname(os.path.join(dst, f)), exist_ok=True)
         shutil.copyfile(os.path.join(src, f), os.path.join(dst, f))
     print(f'{key}: {len(files)} files, SHA256SUMS {sums_hash[:16]}')

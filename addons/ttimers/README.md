@@ -14,6 +14,16 @@
 
 Displays time remaining on buffs and debuffs you've cast, as well as the recast timers for your spells and abilities.
 
+## Screenshots
+
+![Party job ability recasts (added in this fork).](screenshots/party_recasts.png)
+
+*Party job ability recasts (added in this fork).*
+
+![Buffs on you, with who cast them, in the Farplane IX skin.](screenshots/buffs.png)
+
+*Buffs on you, with who cast them, in the Farplane IX skin.*
+
 ## Installation
 Download the release zip(**on the right sidebar, do not click code..download as zip**). Extract directly to your Ashita directory(the folder with ashita-cli.exe in it!). Everything should fall into place. Load the addon with **/addon load tTimers**.
 
@@ -121,7 +131,7 @@ member ids, names and main jobs through Ashita's party API. It sends nothing and
 
 ### Files in the reviewed version
 
-`SHA256SUMS` lists the SHA-256 of every file in this version (1151 files).
+`SHA256SUMS` lists the SHA-256 of every file in this version (1151 files). The README's images in `screenshots/` aren't part of the addon and aren't listed.
 Its own SHA-256 is `eedf091f0ca3c651e724e597ab1bdbc1e6268e0c16c3265ff3197da6541ee131`.
 
 Main files:

@@ -25,6 +25,12 @@ no bot, no webhook.
 FFXI.** Rich Presence is a local-client feature; it will not work against
 Discord in a browser or on another machine.
 
+## Screenshots
+
+![Your Discord status while playing: job, sub job and zone, with the session time.](screenshots/discord_status.png)
+
+*Your Discord status while playing: job, sub job and zone, with the session time.*
+
 ## Set up a Discord Client ID (one-time, free)
 
 Rich Presence requires a Discord "Application" purely to get a Client ID -
@@ -150,7 +156,7 @@ application as the status icon. It's original artwork, not Phoenix's logo.
 
 ### Files in the reviewed version
 
-`SHA256SUMS` lists the SHA-256 of every file in this version (2 files).
+`SHA256SUMS` lists the SHA-256 of every file in this version (2 files). The README's images in `screenshots/` aren't part of the addon and aren't listed.
 Its own SHA-256 is `57a71d467fc5c39d25c572c59753420ed58e53571809a5180e66c591a5c55cfe`.
 
 Main files:

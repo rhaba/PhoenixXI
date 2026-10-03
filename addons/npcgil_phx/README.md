@@ -18,6 +18,12 @@ gil you loot from kills. It doesn't automate, target, move, trade, sell or buy a
 
 `/addon load npcgil_phx`
 
+## Screenshots
+
+![A farming session: items won with their NPC value, gil looted, the total and gil per hour. Hovering a check in the Quest column lists the quests that take the item.](screenshots/npcgil_phx.png)
+
+*A farming session: items won with their NPC value, gil looted, the total and gil per hour. Hovering a check in the Quest column lists the quests that take the item.*
+
 ## What it counts
 
 - **Items you win from the treasure pool**, meaning mob drops and anything else that goes through
@@ -157,7 +163,7 @@ python tools/build_quest_items.py phoenix
 
 ### Files in the reviewed version
 
-`SHA256SUMS` lists the SHA-256 of every file in this version (8 files).
+`SHA256SUMS` lists the SHA-256 of every file in this version (8 files). The README's images in `screenshots/` aren't part of the addon and aren't listed.
 Its own SHA-256 is `02eb88fd16a34d0bf39f29e9fffd918d93c9e791b191b34b777e77716509a3de`.
 
 Main files:

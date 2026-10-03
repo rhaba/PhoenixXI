@@ -15,6 +15,12 @@
 Big enemy HP bars in the style of Windower's **enemybar2**, plus buff and debuff tracking
 from **XIUI**. Every bar is its own window that you can place anywhere.
 
+## Screenshots
+
+![Farplane IX style: the target bar with its weaknesses and resistances above it and its debuffs below, and a party member's bar on the right.](screenshots/enemybar.png)
+
+*Farplane IX style: the target bar with its weaknesses and resistances above it and its debuffs below, and a party member's bar on the right.*
+
 ## Bars
 
 | Bar | Shows |
@@ -187,7 +193,7 @@ Buff and debuff tracking comes from **XIUI**, which is approved for Ashita.
 
 ### Files in the reviewed version
 
-`SHA256SUMS` lists the SHA-256 of every file in this version (673 files).
+`SHA256SUMS` lists the SHA-256 of every file in this version (673 files). The README's images in `screenshots/` aren't part of the addon and aren't listed.
 Its own SHA-256 is `006191a5f42bf04a0de6556fcd0ad5beba8eb976b125db108bbffc8c7081cd52`.
 
 Main files:
