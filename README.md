@@ -15,6 +15,7 @@ addon once its exact version is listed as **Approved** below and on Phoenix's
 | [craftguide](addons/craftguide) | 1.3.3 | Approved 2026-10-05 | 2026-10-02 | Phoenix staff | Display only, sends nothing. |
 | [enemybar](addons/enemybar) | 1.5.1 | Approved 2026-10-05 | 2026-10-02 | Phoenix staff | Display only, sends nothing. Port of enemybar2; distance display off by default. |
 | [tTimers (party fork)](addons/ttimers) | 0.25-party.5 | Approved 2026-10-05 | 2026-10-02 | Phoenix staff | Fork of approved tTimers 0.25: party job ability recasts, theme, skin. |
+| [questtracker](addons/questtracker) | 0.3.1 | Pending review | 2026-10-05 | | Display only, sends nothing. Quest tracker with next steps, item / key item checks and kill counters. |
 
 Not approved (reviewed 2026-10-05) and removed from this repository:
 
