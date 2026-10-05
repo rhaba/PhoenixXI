@@ -65,7 +65,7 @@ def publish(key):
 
 | Version | Status | Submitted | Reviewed by | Notes |
 |---|---|---|---|---|
-| {a["version"]} | Pending review | {a["submitted"]} | | {a["note"]} |
+| {a["version"]} | {a.get("status", "Pending review")} | {a["submitted"]} | {a.get("reviewed_by", "")} | {a["note"]} |
 
 {a["summary"]}
 {HEADER_END}
@@ -116,6 +116,7 @@ Main files:
 
 # ---------------------------------------------------------------------------------------------
 ADDONS['npcgil_phx'] = dict(
+    status='Approved 2026-10-05', reviewed_by='Phoenix staff',
     src='npcgil_phx', folder='npcgil_phx', version='2.3.0', submitted='2026-10-02',
     note='Display only, sends nothing. Replaces 2.2.1 and 2.2.2, which were never reviewed. Adds quest turn-ins and a theme button.',
     summary='**Author:** Spongeh. **Program:** Ashita v4. **Type:** display only. It reads data the client '
@@ -184,54 +185,8 @@ python tools/build_quest_items.py phoenix
 - `npcgil_phx.lua`: version and description.
 ''')
 
-ADDONS['presence'] = dict(
-    src='presence', folder='presence', version='2.0.0', submitted='2026-10-02',
-    note='Display only, sends nothing to the game server. Updates your local Discord status.',
-    summary='**Author:** Spongeh. **Program:** Ashita v4. **Type:** Discord Rich Presence. It shows '
-            'your job and zone as your Discord "Playing ..." status, and never sends anything to the '
-            'game server.',
-    key_files=['presence.lua'],
-    review='''
-### What it reads
-
-- **No packets** of any kind.
-- **Client memory, through Ashita's API:**
-  - **your own party slot (index 0):** whether you're logged in, your name and your zone. The
-    name is used only to detect login, logout and character changes, and is never sent anywhere;
-  - **your own player data:** main and sub job and their levels;
-  - **zone names** from the client's resource data.
-
-It checks these at most once every 2 seconds.
-
-### What it writes
-
-- **Its own settings file,** through Ashita's settings library: your Discord application id, the
-  on/off switches and the optional icon key.
-- **Your local Discord client,** over Discord's local IPC named pipe (`\\\\.\\pipe\\discord-ipc-N`),
-  the same mechanism games use for Rich Presence. It sends the handshake and a `SET_ACTIVITY`
-  with:
-  - your main/sub job and levels (if enabled);
-  - your zone name (if enabled);
-  - a session start time;
-  - the optional icon.
-
-  On logout or unload it clears the activity. This is local to your PC. It isn't a network
-  request from the addon, and it posts no messages to any Discord channel.
-
-### What it does NOT do
-
-- **No game traffic:** no outgoing or incoming game packets are sent, read, modified or
-  blocked.
-- **No commands:** no `QueueCommand` or automated chat or actions.
-- **No other network or file access:** no HTTP, sockets, bots or webhooks. The only I/O is the
-  local Discord pipe and its own settings file.
-- **No other players' data:** only your own character.
-
-`branding/phoenix_presence_logo.png` is an optional image you can upload to your own Discord
-application as the status icon. It's original artwork, not Phoenix's logo.
-''')
-
 ADDONS['enemybar'] = dict(
+    status='Approved 2026-10-05', reviewed_by='Phoenix staff',
     src='enemybar', folder='enemybar', version='1.5.1', submitted='2026-10-02',
     note='Display only, sends nothing. Distance display off by default (enemybar2 condition).',
     summary='**Author:** mmckee and akaden (enemybar2, BSD 3-Clause); XIUI authors (debuff tracking, '
@@ -288,6 +243,7 @@ Buff and debuff tracking comes from **XIUI**, which is approved for Ashita.
 ''')
 
 ADDONS['ttimers'] = dict(
+    status='Approved 2026-10-05', reviewed_by='Phoenix staff',
     src='ttimers', folder='ttimers', version='0.25-party.5', submitted='2026-10-02',
     note='Fork of approved tTimers 0.25. Adds party job ability recasts, a theme and a skin.',
     summary='**Author:** Thorny (tTimers, MIT); party tracker, theme and Farplane IX skin by Spongeh. '

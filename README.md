@@ -11,16 +11,21 @@ addon once its exact version is listed as **Approved** below and on Phoenix's
 
 | Addon | Version | Status | Submitted | Reviewed by | Notes |
 |---|---|---|---|---|---|
-| [npcgil-phx](addons/npcgil_phx) | 2.3.0 | Pending review | 2026-10-02 | | Display only, sends nothing. Adds quest turn-ins. Replaces 2.2.1 and 2.2.2, which were never reviewed. |
-| [craftguide](addons/craftguide) | 1.3.3 | Pending review | 2026-10-02 | | Display only, sends nothing. Replaces 1.3.1 and 1.3.2, which were never reviewed. |
-| [TradeNPC](addons/tradenpc) | 1.20.09.02-ashita.1 | Pending review | 2026-10-02 | | Sends the trade packet (0x036), only on command |
-| [enemybar](addons/enemybar) | 1.5.1 | Pending review | 2026-10-02 | | Display only, sends nothing. Port of enemybar2; distance display off by default |
-| [presence](addons/presence) | 2.0.0 | Pending review | 2026-10-02 | | Sends nothing to the game server. Updates your local Discord status |
-| [tTimers (party fork)](addons/ttimers) | 0.25-party.5 | Pending review | 2026-10-02 | | Fork of approved tTimers 0.25: party job ability recasts, theme, skin |
+| [npcgil-phx](addons/npcgil_phx) | 2.3.0 | Approved 2026-10-05 | 2026-10-02 | Phoenix staff | Display only, sends nothing. |
+| [craftguide](addons/craftguide) | 1.3.3 | Approved 2026-10-05 | 2026-10-02 | Phoenix staff | Display only, sends nothing. |
+| [enemybar](addons/enemybar) | 1.5.1 | Approved 2026-10-05 | 2026-10-02 | Phoenix staff | Display only, sends nothing. Port of enemybar2; distance display off by default. |
+| [tTimers (party fork)](addons/ttimers) | 0.25-party.5 | Approved 2026-10-05 | 2026-10-02 | Phoenix staff | Fork of approved tTimers 0.25: party job ability recasts, theme, skin. |
 
-Phoenix's rules treat any change to an addon's script as a new, unreviewed version. So every
-update gets a new version number and a new row here, and each addon's README lists a SHA-256 for
-every file in that exact version.
+Not approved (reviewed 2026-10-05) and removed from this repository:
+
+- **presence** 2.0.0: Phoenix already ships a Discord presence addon in its launcher,
+  **phxpresence**, and recommends using it.
+- **TradeNPC** 1.20.09.02-ashita.1: trade assist addons aren't allowed on Phoenix XI.
+
+Any change that adds or modifies a feature makes a new version that has to be submitted for
+review again. Staff have said cosmetic or visual changes that don't affect how an addon works
+don't need resubmitting. Every update still gets a new version number and a new row here, and
+each addon's README lists a SHA-256 for every file in that exact version.
 
 ## Install
 
@@ -44,5 +49,4 @@ do (outgoing packets, commands, network access), plus the file hashes. Larger ad
 
 ## License
 
-GPL-3.0 (see `LICENSE`) unless an addon's folder has its own license. TradeNPC keeps Ivaar's
-BSD 3-Clause license. Price tables are generated from PhoenixXI's GPL-3.0 server repository.
+GPL-3.0 (see `LICENSE`) unless an addon's folder has its own license. Price tables are generated from PhoenixXI's GPL-3.0 server repository.

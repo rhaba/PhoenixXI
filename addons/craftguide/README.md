@@ -4,7 +4,7 @@
 
 | Version | Status | Submitted | Reviewed by | Notes |
 |---|---|---|---|---|
-| 1.3.3 | Pending review | 2026-10-02 | | Display only, sends nothing. Replaces 1.3.1 and 1.3.2, which were never reviewed. |
+| 1.3.3 | Approved 2026-10-05 | 2026-10-02 | Phoenix staff | Display only, sends nothing. Replaces 1.3.1 and 1.3.2, which were never reviewed. |
 
 **Author:** Spongeh. **Program:** Ashita v4. **Type:** display only: a crafting and fishing
 reference. It reads your own skills and never sends anything to the server.

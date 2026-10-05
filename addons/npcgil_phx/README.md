@@ -5,7 +5,7 @@
 
 | Version | Status | Submitted | Reviewed by | Notes |
 |---|---|---|---|---|
-| 2.3.0 | Pending review | 2026-10-02 | | Display only, sends nothing. Replaces 2.2.1 and 2.2.2, which were never reviewed. Adds quest turn-ins and a theme button. |
+| 2.3.0 | Approved 2026-10-05 | 2026-10-02 | Phoenix staff | Display only, sends nothing. Replaces 2.2.1 and 2.2.2, which were never reviewed. Adds quest turn-ins and a theme button. |
 
 **Author:** Spongeh. **Program:** Ashita v4. **Type:** display only. It reads data the client already receives and never sends anything to the server.
 <!-- /staff-approval -->

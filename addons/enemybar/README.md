@@ -5,7 +5,7 @@
 
 | Version | Status | Submitted | Reviewed by | Notes |
 |---|---|---|---|---|
-| 1.5.1 | Pending review | 2026-10-02 | | Display only, sends nothing. Distance display off by default (enemybar2 condition). |
+| 1.5.1 | Approved 2026-10-05 | 2026-10-02 | Phoenix staff | Display only, sends nothing. Distance display off by default (enemybar2 condition). |
 
 **Author:** mmckee and akaden (enemybar2, BSD 3-Clause); XIUI authors (debuff tracking, GPL-3.0); Ashita port by Spongeh. **Program:** Ashita v4. **Type:** display only. Enemy HP bars with buff and debuff timers; it never sends anything to the server.
 <!-- /staff-approval -->

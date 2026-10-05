@@ -5,7 +5,7 @@
 
 | Version | Status | Submitted | Reviewed by | Notes |
 |---|---|---|---|---|
-| 0.25-party.5 | Pending review | 2026-10-02 | | Fork of approved tTimers 0.25. Adds party job ability recasts, a theme and a skin. |
+| 0.25-party.5 | Approved 2026-10-05 | 2026-10-02 | Phoenix staff | Fork of approved tTimers 0.25. Adds party job ability recasts, a theme and a skin. |
 
 **Author:** Thorny (tTimers, MIT); party tracker, theme and Farplane IX skin by Spongeh. **Program:** Ashita v4. **Type:** display only: timer panels. It is a fork of tTimers 0.25, which is approved.
 <!-- /staff-approval -->
