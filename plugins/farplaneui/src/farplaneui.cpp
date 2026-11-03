@@ -70,6 +70,7 @@ namespace farplaneui
         modules_.push_back(std::make_unique<BarStyleModule>());
         modules_.push_back(std::make_unique<DpsModule>());
         modules_.push_back(std::make_unique<QuestModule>());
+        modules_.push_back(std::make_unique<ShadowModule>());
         modules_.push_back(std::make_unique<NativeUiModule>(chat_->HideNativeFlag()));
     }
 
@@ -79,7 +80,7 @@ namespace farplaneui
     auto plugin::GetAuthor(void) const -> const char* { return "Farplane Team"; }
     auto plugin::GetDescription(void) const -> const char* { return "A holistic refined/ornate UI replacement for Final Fantasy XI."; }
     auto plugin::GetLink(void) const -> const char* { return ""; }
-    auto plugin::GetVersion(void) const -> double { return 0.111; }
+    auto plugin::GetVersion(void) const -> double { return 0.112; }
     auto plugin::GetInterfaceVersion(void) const -> double { return ASHITA_INTERFACE_VERSION; }
     auto plugin::GetPriority(void) const -> int32_t { return 0; }
     auto plugin::GetFlags(void) const -> uint32_t
@@ -330,7 +331,7 @@ namespace farplaneui
         if (sub == "status")
         {
             char b[256]{};
-            ::sprintf_s(b, "FarplaneUI v0.11.1 build %s %s | camera valid=%d captures=%u rejected=%u", __DATE__, __TIME__,
+            ::sprintf_s(b, "FarplaneUI v0.11.2 build %s %s | camera valid=%d captures=%u rejected=%u", __DATE__, __TIME__,
                 ctx_.camera.valid ? 1 : 0, ctx_.camera.captures, ctx_.camera.rejected);
             Print(b);
             ReportStatus();
@@ -497,7 +498,8 @@ namespace farplaneui
             ember::BuildDock(ctx_, mask_->mask.overlay_);
         else
             mask_->mask.overlay_.clear();
-        ctx_.ring.want = false; // the target module re-requests the 3D ring every frame
+        ctx_.ring.want    = false; // the target module re-requests the 3D ring every frame
+        ctx_.shadows.want = false; // and the shadows module its shadows
         const double presentStart = perf_.on ? Qpc() : 0;
         for (size_t i = 0; i < modules_.size(); ++i)
         {
@@ -621,7 +623,7 @@ namespace farplaneui
         ::sprintf_s(name, "\\farplaneui_perf_%04u-%02u-%02u_%02u%02u%02u.log", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
         perf_.file = dir + name;
         char b[512]{};
-        ::sprintf_s(b, "FarplaneUI v0.11.1 perf log - %.1f minutes, one entry per 5 seconds. Times in ms.\r\n"
+        ::sprintf_s(b, "FarplaneUI v0.11.2 perf log - %.1f minutes, one entry per 5 seconds. Times in ms.\r\n"
                        "gap = time between frames (the game's frame time; over 50 ms counts as a hitch). ours = FarplaneUI work in that frame.\r\n"
                        "modules: average / worst single frame (Frame + Render; text and packet time are in the average).\r\n\r\n",
             minutes);
@@ -1068,7 +1070,7 @@ namespace farplaneui
 
     void plugin::ReportStatus(void)
     {
-        Print(std::string("FarplaneUI v0.11.1 build ") + __DATE__ + " " + __TIME__ + " loaded (/fpui status for diagnostics). /fpui opens the settings. Modules: mask, chat, minimap, inventory, party, equip, target, targetbar, points, ticks, notify, recast, castbar, status, enemies, readycheck, alliance, compass, cmdmenu, bars, dps, native.");
+        Print(std::string("FarplaneUI v0.11.2 build ") + __DATE__ + " " + __TIME__ + " loaded (/fpui status for diagnostics). /fpui opens the settings. Modules: mask, chat, minimap, inventory, party, equip, target, targetbar, points, ticks, notify, recast, castbar, status, enemies, readycheck, alliance, compass, cmdmenu, bars, dps, quests, shadows, native.");
         mask_->Report(ctx_);
         std::string missingArt;
         int ok = 0, total = 0;

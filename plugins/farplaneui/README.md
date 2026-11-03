@@ -5,7 +5,7 @@
 
 | Version | Status | Submitted | Reviewed by | Notes |
 |---|---|---|---|---|
-| 0.11.1 | Pending review | 2026-11-03 |  | Ashita v4 plugin (C++ DLL), source included. Sends no packets. Hides and replaces parts of the game UI. Replaces 0.11.0 (submitted the same day, not yet reviewed): adds Ctrl+R reply in its chat line. |
+| 0.11.2 | Pending review | 2026-11-03 |  | Ashita v4 plugin (C++ DLL), source included. Sends no packets. Hides and replaces parts of the game UI. Replaces 0.11.0 and 0.11.1 (submitted the same day, not yet reviewed): adds Ctrl+R reply in its chat line and an optional Utsusemi shadow display. |
 
 **Author:** Spongeh, building on the work of the XIUI creators (special thanks to Shuu for the idea of packaging many UI elements into a single load). **Program:** Ashita v4 plugin (C++). **Type:** UI replacement. It reads data the client already has or receives, draws its own interface, and hides the game's own versions of the parts it replaces. It sends no packets. Only active while the Farplane linkshell is equipped.
 <!-- /staff-approval -->
@@ -26,6 +26,8 @@ dock:
   with drops (with rates), steal, respawn and NM placeholders.
 - **Target ring:** drawn in the 3D scene with the name, detection and resists.
 - **Timers:** recast timers in the tTimers look, and status icons with their time left.
+- **Utsusemi:** your shadow count shown around your character, in the style you pick (wisps,
+  diamond, rune ring, smoke, pips or off).
 - **Other panels:** cast bar, rest tick timer, XP / points, and a quest tracker that slides in from
   the right edge.
 
@@ -77,7 +79,8 @@ gen_mobdb.exe <mobdb addon folder> resources/farplaneui/mobdb
 
 ## Commands
 
-`/fpui` opens the settings window. `/fpui native` lists what it hides in the game's UI and
+`/fpui` opens the settings window. Ctrl+R replies to your last tell. `/fpui shadows style <name>`
+picks the Utsusemi display (`none` turns it off). `/fpui native` lists what it hides in the game's UI and
 `/fpui native all off` stops all of that hiding. See the settings window for everything else.
 
 ## Credits
@@ -100,11 +103,18 @@ This is a plugin, so the source is included next to the DLL (`src/`, built with 
 `plugins/FarplaneUI.dll` is the release build of exactly this source (MSVC 2022, x86 Release).
 
 ### Changes since 0.11.0
-0.11.0 was submitted earlier the same day and hasn't been reviewed; 0.11.1 replaces it. The only
-change is in `src/modules/mod_chat.cpp` (plus its declarations in `src/modules.hpp` and the version
-number in `src/farplaneui.cpp`): **Ctrl+R** (the game's "reply to last tell") opens FarplaneUI's own
-chat line prefilled with `/t <name of the last player who sent you a tell> ` instead of the game's
-input bar. The player still types the reply and presses Enter; nothing is sent automatically.
+0.11.0 and 0.11.1 were submitted earlier the same day and haven't been reviewed; 0.11.2 replaces
+them. Two additions, both display / input only:
+- **0.11.1, Ctrl+R reply** (`src/modules/mod_chat.cpp`, declarations in `src/modules.hpp`): Ctrl+R
+  (the game's "reply to last tell") opens FarplaneUI's own chat line prefilled with
+  `/t <name of the last player who sent you a tell> ` instead of the game's input bar. The player
+  still types the reply and presses Enter; nothing is sent automatically.
+- **0.11.2, Utsusemi shadow display** (new `src/modules/mod_shadows.cpp`, drawing in
+  `src/worldring.cpp`, shared state in `src/module.hpp`): shows how many Copy Image shadows you have
+  around your own character, in a style the player picks (wisps, diamond, rune ring, smoke, pips or
+  none). The count is read from your own buff list (Copy Image status ids 66 / 444 / 445 / 446), the
+  same buffs the status icons show. It is drawn in the same 3D pass as the target ring, through the
+  existing `SetRenderTarget` hook; no new hook, packet or memory write.
 
 ### What it reads
 **Incoming packets.** It only listens: packets are never changed, blocked or injected.
@@ -142,8 +152,8 @@ from Ashita's resource manager. Monster and quest data are built in (see the REA
 - **Command menu position:** optionally moves the game's own command menu windows by calling the
   game's window set-position routine; original positions are restored when disabled or unloaded.
 - **Direct3D:** draws its own interface through Ashita's ImGui and D3D8 sprites; patches the
-  device's `SetRenderTarget` vtable slot to draw the target ring inside the 3D scene (restored on
-  unload); reads the camera matrices from draw calls.
+  device's `SetRenderTarget` vtable slot to draw the target ring and the Utsusemi shadow display
+  inside the 3D scene (restored on unload); reads the camera matrices from draw calls.
 
 ### Input
 - **Keyboard:** Space or `/` opens FarplaneUI's own chat input line (Ctrl / Alt chords and other
@@ -185,20 +195,21 @@ repository (the same data as the mobdb 2.x addon).
 
 ### Files in the reviewed version
 
-`SHA256SUMS` lists the SHA-256 of every file in this version (1551 files).
-Its own SHA-256 is `cc3d560f6ed32a134f90dda0fa8be69bf78e36cffb3f2260c002c89c2d34f988`.
+`SHA256SUMS` lists the SHA-256 of every file in this version (1552 files).
+Its own SHA-256 is `fa591ce77b44ccbddccc1c1ea1812c70bca8b75b95eccda74245d1b33595dd5b`.
 
 Main files:
 
 | File | SHA-256 |
 |---|---|
-| `plugins/FarplaneUI.dll` | `a999643c013b5219737adcd0d42e28c8fec7a1a858a0ada58902ed7ba3dce4cf` |
-| `CMakeLists.txt` | `912743493c34553e2668c2de49d9fb0d9fa0512260168dc2d5bfd122add08d96` |
-| `src/farplaneui.cpp` | `c4dbfe3abf2f7b4ced85fb7e9f77ada376d37f4bcaa18499f425bb1785605af7` |
+| `plugins/FarplaneUI.dll` | `15dbbcf6b76f987d6e117d41b70a990d97fbbfbc47b969788a03c81aa6d32d52` |
+| `CMakeLists.txt` | `9151e08975a7cbb304a6ac71448da3ab723900325ac8d941376c5b8b388d5fe7` |
+| `src/farplaneui.cpp` | `ab4bc6fd6a4b09419b0563344e568f6a1c6bb654254a32556b980c921af79695` |
 | `src/modules/mod_native.cpp` | `dfe638db6249d23c5e58e3ad5ec4975ea7aa3e5008f2d9b0531be46142ae1ad1` |
 | `src/modules/mod_cmdmenu.cpp` | `0ed691f082947acb37411fdd3bfb30be4057cc314a1ea3491fb6f61502a151d2` |
 | `src/modules/mod_chat.cpp` | `4870c48072a928b8176bb117fa9e93aa2c1202b12a27120239e1d4ceff9c911a` |
-| `src/worldring.cpp` | `f841b993f1bb373d229685fa9aca949ec00f0a194278bb53d01da71c5a8fa3b2` |
+| `src/modules/mod_shadows.cpp` | `e80623138b333c20b780f90dac64d460676370cd84d595de14407ade59438f72` |
+| `src/worldring.cpp` | `a92b230b3d7f8f0e07c953f998ba70569f2ad9d9448aeb5014d6dcfbc42b5237` |
 | `src/mask.cpp` | `44b67265b40975375ed5ca72a31cc2c984dfad67a8b15ee6dfe747191093c580` |
 | `src/data/quest_db.hpp` | `52a76bb70ef80a9365f43fc24523e06cb465b6fd39090ce11650077120ee3c7b` |
 | `tools/gen_mobdb.cpp` | `c4044f0591cf9756ac48c22a5ceec509d599d6af3a3d18de757b239bb7932eab` |

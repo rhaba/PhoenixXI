@@ -784,6 +784,48 @@ namespace farplaneui
         void IncomingPacket(Context& ctx, uint16_t id, uint32_t size, const uint8_t* data) override;
         void Release(void) override;
     };
+
+    // Utsusemi shadows (incoming ember_dock_wiring (2) WIRING.md U1-U7): your Copy Image count drawn
+    // around your character in the 3D scene, in one of five styles or none.
+    class ShadowModule final : public IModule
+    {
+    public:
+        static constexpr int kStyles = 6;
+        static constexpr const char* kKeys[kStyles]  = {"none", "wisps", "diamond", "runering", "smoke", "pips"};
+        static constexpr const char* kNames[kStyles] = {"Off", "Wisps", "Diamond", "Rune ring", "Smoke", "Pips"};
+        struct Look
+        {
+            int color{0};
+            float size{1.0f}, opacity{1.0f}, speed{0.35f};
+            bool glow{true};
+        };
+
+    private:
+        int style_{2};
+        std::array<Look, kStyles> look_{};
+        float lostTime_{0.45f}, outTime_{0.6f};
+        int maxShown_{4};
+        bool hideFirstPerson_{true};
+        bool preview_{false};  // settings: cycle 4 -> 0 every 1.5 s while the settings window is open
+        int previewCount_{-1}; // /fpui shadows preview <0-4>; -1 = off
+        double previewAt_{0};
+        // Animation state (U4).
+        int prev_{0}, lostIdx_{-1};
+        float lostT_{99}, outT_{99}, inT_{99}, spin_{0};
+        double lastAt_{0};
+        auto Count(Context& ctx) const -> int;
+
+    public:
+        ShadowModule(void);
+        auto Name(void) const -> const char* override { return "shadows"; }
+        auto Title(void) const -> const char* override { return "Shadows"; }
+        void Load(IConfigurationManager* cfg, const char* alias) override;
+        void Save(IConfigurationManager* cfg, const char* alias) const override;
+        void Frame(Context& ctx) override;
+        auto SettingsSections(void) const -> std::vector<const char*> override { return {"Style", "Look", "Behaviour"}; }
+        void RenderSettings(Context& ctx, IGuiManager* gui) override;
+        auto Command(Context& ctx, const std::vector<std::string>& args) -> bool override;
+    };
 } // namespace farplaneui
 
 #endif

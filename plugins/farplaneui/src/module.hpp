@@ -135,10 +135,30 @@ namespace farplaneui
         bool hooked{false};               // host: SetRenderTarget hook installed
     };
 
+    // Utsusemi shadows around the player, requested by the shadows module and drawn inside the 3D scene
+    // by the host (same pass as the ring). Position is game world space like WorldRing (up is -Y).
+    struct WorldShadows
+    {
+        bool want{false};
+        int style{0};                 // 1 wisps, 2 diamond, 3 rune ring, 4 smoke, 5 pips (0 none)
+        float x{0}, y{0}, z{0};       // feet
+        float height{1.6f};           // yalms
+        float time{0};                // seconds, drives spin / drift
+        int count{0}, maxShown{4};    // lit shadows, slots drawn
+        int lostIdx{-1};              // slot that was just lost (flash), -1 none
+        float lostA{0};               // 1 -> 0 over the lost flash
+        float inA{1};                 // 0 -> 1 as new shadows appear (recast)
+        float outA{1}, outScale{1};   // whole effect fade / grow when the last shadow goes
+        Rgba color{0.81f, 0.45f, 0.24f, 1.0f};
+        float size{1.0f}, opacity{1.0f};
+        bool glow{true};
+    };
+
     struct Context
     {
         Camera camera{};
         WorldRing ring{};
+        WorldShadows shadows{};
         int settingsSection{0}; // section selected in the settings window (IModule::SettingsSections)
         bool settingsOpen{false};                // the settings window is showing
         bool commandMenuMoved{false};

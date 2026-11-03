@@ -98,7 +98,7 @@ namespace farplaneui
             return;
         auto& ring      = ctx_->ring;
         const auto& cam = ctx_->camera;
-        if (!ring.want || ring.drawnFrame == cam.frame || cam.lastFrame != cam.frame || cam.sceneTarget == nullptr ||
+        if ((!ring.want && !ctx_->shadows.want) || ring.drawnFrame == cam.frame || cam.lastFrame != cam.frame || cam.sceneTarget == nullptr ||
             target == cam.sceneTarget)
             return;
         IDirect3DSurface8* current = nullptr;
@@ -116,7 +116,6 @@ namespace farplaneui
 
     void WorldRingRenderer::Draw(void)
     {
-        const auto& ring = ctx_->ring;
         const auto& cam  = ctx_->camera;
         if (stateBlock_ == 0 && FAILED(device_->CreateStateBlock(D3DSBT_ALL, &stateBlock_)))
         {
@@ -155,6 +154,16 @@ namespace farplaneui
         device_->SetRenderState(D3DRS_ZFUNC, cam.zFunc);
         device_->SetRenderState(D3DRS_ZBIAS, 4);
 
+        if (ctx_->ring.want)
+            DrawRing();
+        if (ctx_->shadows.want)
+            DrawShadows();
+        device_->ApplyStateBlock(stateBlock_); // hand the game back exactly the state it had
+    }
+
+    void WorldRingRenderer::DrawRing(void)
+    {
+        const auto& ring = ctx_->ring;
         // Game world: up is -Y, so lift the ring a little off the ground to avoid z-fighting.
         const float cx = ring.x, cy = ring.y - 0.04f, cz = ring.z;
         const float r  = std::max(0.3f, ring.radius);
@@ -181,7 +190,6 @@ namespace farplaneui
                 };
                 device_->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 1, tri, sizeof(Vertex));
             }
-            device_->ApplyStateBlock(stateBlock_);
             return;
         }
 
@@ -259,8 +267,234 @@ namespace farplaneui
             const Vertex tris[6] = {b1, tip, mid, mid, tip, b2};
             device_->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, tris, sizeof(Vertex));
         }
+    }
 
-        device_->ApplyStateBlock(stateBlock_); // hand the game back exactly the state it had
+    // Utsusemi shadows (incoming ember_dock_wiring (2) WIRING.md U3, U7). Drawn in the 3D scene with the
+    // depth test on, so the character really hides the parts behind it. Sizes given in px are 1080p
+    // screen pixels at the player's distance, converted with pw (yalms per pixel).
+    void WorldRingRenderer::DrawShadows(void)
+    {
+        const auto& sh  = ctx_->shadows;
+        const auto& v   = ctx_->camera.view;
+        struct V3
+        {
+            float x, y, z;
+        };
+        auto add   = [](V3 a, V3 b) { return V3{a.x + b.x, a.y + b.y, a.z + b.z}; };
+        auto sub   = [](V3 a, V3 b) { return V3{a.x - b.x, a.y - b.y, a.z - b.z}; };
+        auto mul   = [](V3 a, float k) { return V3{a.x * k, a.y * k, a.z * k}; };
+        auto cross = [](V3 a, V3 b) { return V3{a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x}; };
+        auto len   = [](V3 a) { return std::sqrt(a.x * a.x + a.y * a.y + a.z * a.z); };
+        auto norm  = [&](V3 a) { const float l = len(a); return l > 1e-5f ? mul(a, 1.0f / l) : V3{0, 0, 0}; };
+        // Camera axes and position from the view matrix (rows of its rotation part).
+        const V3 camR{v._11, v._21, v._31}, camU{v._12, v._22, v._32}, camF{v._13, v._23, v._33};
+        const V3 camPos = mul(add(add(mul(camR, v._41), mul(camU, v._42)), mul(camF, v._43)), -1.0f);
+        const V3 up{0, -1, 0}; // game world: up is -Y
+        const float h = sh.height * sh.size * sh.outScale;
+        const V3 feet{sh.x, sh.y - 0.04f, sh.z};
+        const V3 chest = add(feet, mul(up, 0.55f * sh.height));
+        const float projY = std::abs(ctx_->camera.proj._22) > 0.01f ? std::abs(ctx_->camera.proj._22) : 1.0f;
+        const float pw    = 2.0f * len(sub(chest, camPos)) / (projY * 1080.0f);
+        const float A     = std::clamp(sh.opacity * sh.outA, 0.0f, 1.0f);
+        const Rgba hot{1.0f, 0.47f, 0.24f, 1}, ivory{0.95f, 0.91f, 0.85f, 1}, grey{0.55f, 0.58f, 0.66f, 1}, dark{0.06f, 0.07f, 0.11f, 1};
+        const Rgba& col = sh.color;
+        const int n     = std::max(1, sh.maxShown);
+
+        auto tri = [&](V3 a, V3 b, V3 c, D3DCOLOR k) {
+            const Vertex t[3] = {{a.x, a.y, a.z, k}, {b.x, b.y, b.z, k}, {c.x, c.y, c.z, k}};
+            device_->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 1, t, sizeof(Vertex));
+        };
+        // Camera-facing line of `wPx` screen pixels.
+        auto line = [&](V3 a, V3 b, float wPx, D3DCOLOR k) {
+            const V3 mid = mul(add(a, b), 0.5f);
+            const V3 o   = mul(norm(cross(sub(b, a), sub(mid, camPos))), wPx * pw * 0.5f);
+            const Vertex q[4] = {{a.x + o.x, a.y + o.y, a.z + o.z, k}, {a.x - o.x, a.y - o.y, a.z - o.z, k}, {b.x + o.x, b.y + o.y, b.z + o.z, k},
+                {b.x - o.x, b.y - o.y, b.z - o.z, k}};
+            device_->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, q, sizeof(Vertex));
+        };
+        auto glowLine = [&](V3 a, V3 b, const Rgba& c, float a0) {
+            if (sh.glow)
+                line(a, b, 4.0f, Argb(c, a0 * 0.18f));
+            line(a, b, 1.5f, Argb(c, a0));
+        };
+        // Camera-facing soft dot: centre colour fading to the rim colour (radius in world units).
+        auto dot = [&](V3 p, float r, D3DCOLOR cIn, D3DCOLOR cOut) {
+            constexpr int kSeg = 16;
+            Vertex fan[kSeg + 2];
+            fan[0] = {p.x, p.y, p.z, cIn};
+            for (int i = 0; i <= kSeg; ++i)
+            {
+                const float a = static_cast<float>(i) * kTwoPi / kSeg, ca = std::cos(a) * r, sa = std::sin(a) * r;
+                fan[i + 1] = {p.x + camR.x * ca + camU.x * sa, p.y + camR.y * ca + camU.y * sa, p.z + camR.z * ca + camU.z * sa, cOut};
+            }
+            device_->DrawPrimitiveUP(D3DPT_TRIANGLEFAN, kSeg, fan, sizeof(Vertex));
+        };
+        // Diamond: camera-facing (ground = false) or flat on the ground (ground = true), half size r.
+        auto diamond = [&](V3 p, float r, D3DCOLOR k, bool ground) {
+            const V3 ax = ground ? V3{r, 0, 0} : mul(camR, r), ay = ground ? V3{0, 0, r} : mul(camU, r);
+            tri(add(p, ay), add(p, ax), sub(p, ay), k);
+            tri(add(p, ay), sub(p, ax), sub(p, ay), k);
+        };
+        // Per-slot state: lit, the one just lost (flash), or empty.
+        auto lit  = [&](int k) { return k < sh.count; };
+        auto lost = [&](int k) { return k == sh.lostIdx && sh.lostA > 0.0f; };
+        const float litA = A * sh.inA;
+
+        switch (sh.style)
+        {
+        case 1: // wisps: orbiting motes with a fading trail, a faint ground ring
+        {
+            const float R = 0.5f * h;
+            Strip(feet.x, feet.y, feet.z, R - 1.5f * pw, R + 1.5f * pw, 0.0f, kTwoPi, Argb(col, 0.43f * A), Argb(col, 0.43f * A));
+            for (int k = 0; k < n; ++k)
+            {
+                const float phi = sh.time + kTwoPi * static_cast<float>(k) / static_cast<float>(n);
+                auto at = [&](float a, float r) { return add(chest, V3{std::cos(a) * r, 0, std::sin(a) * r}); };
+                if (lost(k))
+                {
+                    const V3 p = at(phi, R * (1.0f + 0.6f * (1.0f - sh.lostA)));
+                    dot(p, 9.0f * pw * sh.size, Argb(hot, sh.lostA * A), Argb(hot, 0.0f));
+                    continue;
+                }
+                if (!lit(k))
+                {
+                    dot(at(phi, R), 2.5f * pw, Argb(grey, 0.3f * A), Argb(grey, 0.0f));
+                    continue;
+                }
+                for (int j = 6; j >= 1; --j) // trail along the past angles
+                    dot(at(phi - 0.12f * static_cast<float>(j), R), 2.0f * pw * sh.size, Argb(col, litA * 0.5f * (1.0f - j / 7.0f)), Argb(col, 0.0f));
+                const V3 p = at(phi, R);
+                if (sh.glow)
+                    dot(p, 12.0f * pw * sh.size, Argb(Rgba{0.10f, 0.08f, 0.20f, 1}, 0.59f * litA), Argb(col, 0.0f));
+                dot(p, 6.5f * pw * sh.size, Argb(col, litA), Argb(col, 0.0f));
+                dot(p, 2.5f * pw * sh.size, Argb(ivory, litA), Argb(ivory, 0.3f * litA));
+            }
+            break;
+        }
+        case 2: // diamond: a slowly turning octahedron, one side facet per shadow
+        {
+            const float R = 0.42f * h;
+            const V3 top = add(chest, mul(up, 0.62f * h)), bot = add(chest, mul(up, -0.58f * h));
+            std::vector<V3> e(static_cast<size_t>(n));
+            for (int k = 0; k < n; ++k)
+            {
+                const float a = sh.time + kTwoPi * static_cast<float>(k) / static_cast<float>(n);
+                e[static_cast<size_t>(k)] = add(chest, V3{std::cos(a) * R, 0, std::sin(a) * R});
+            }
+            for (int k = 0; k < n; ++k)
+            {
+                const V3 a = e[static_cast<size_t>(k)], b = e[static_cast<size_t>((k + 1) % n)];
+                if (lit(k) || lost(k))
+                {
+                    const Rgba& c = lost(k) ? hot : col;
+                    const float fa = lost(k) ? 0.45f * sh.lostA * A : 0.06f * litA; // faint fill keeps the character visible
+                    tri(top, a, b, Argb(c, fa));
+                    tri(bot, a, b, Argb(c, fa));
+                }
+            }
+            for (int k = 0; k < n; ++k)
+            {
+                const int kp      = (k + n - 1) % n;
+                const V3 a        = e[static_cast<size_t>(k)], b = e[static_cast<size_t>((k + 1) % n)];
+                const bool on     = lit(k), onSide = lit(k) || lit(kp);
+                const bool flash  = lost(k) || lost(kp);
+                const Rgba amber{0.90f, 0.71f, 0.47f, 1};
+                // equator edge of facet k, and the vertical edges through e_k (shared with facet k-1)
+                if (lost(k))
+                    glowLine(a, b, hot, sh.lostA * A);
+                else if (on)
+                    glowLine(a, b, amber, 0.9f * litA);
+                else
+                    line(a, b, 1.0f, Argb(grey, 0.27f * A));
+                const Rgba& sc = flash ? hot : amber;
+                const float sa = flash ? sh.lostA * A : onSide ? 0.9f * litA : 0.0f;
+                if (sa > 0.0f)
+                {
+                    glowLine(top, a, sc, sa);
+                    glowLine(bot, a, sc, sa);
+                }
+                else
+                {
+                    line(top, a, 1.0f, Argb(grey, 0.27f * A));
+                    line(bot, a, 1.0f, Argb(grey, 0.27f * A));
+                }
+            }
+            dot(top, 3.0f * pw, Argb(ivory, A), Argb(ivory, 0.4f * A));
+            dot(bot, 3.0f * pw, Argb(ivory, A), Argb(ivory, 0.4f * A));
+            break;
+        }
+        case 3: // rune ring: a ground circle with one rune per shadow
+        {
+            const float R = 0.62f * h, rr = 0.09f * h;
+            Strip(feet.x, feet.y, feet.z, R - 1.0f * pw, R + 1.0f * pw, 0.0f, kTwoPi, Argb(col, 0.55f * A), Argb(col, 0.55f * A));
+            if (sh.glow)
+                Strip(feet.x, feet.y, feet.z, R + 1.0f * pw, R + 6.0f * pw, 0.0f, kTwoPi, Argb(col, 0.15f * A), Argb(col, 0.0f));
+            for (int k = 0; k < n; ++k)
+            {
+                const float a = -kPi * 0.5f + kTwoPi * static_cast<float>(k) / static_cast<float>(n);
+                const V3 p    = {feet.x + std::cos(a) * R, feet.y - 0.01f, feet.z + std::sin(a) * R};
+                if (lost(k))
+                {
+                    diamond(p, rr * (1.0f + 0.8f * (1.0f - sh.lostA)), Argb(hot, sh.lostA * A), true);
+                    continue;
+                }
+                diamond(p, rr * 1.2f, Argb(lit(k) ? col : grey, (lit(k) ? 0.35f * litA : 0.35f * A)), true);
+                diamond(p, rr, Argb(lit(k) ? col : dark, lit(k) ? litA : 0.7f * A), true);
+                if (lit(k))
+                    diamond(p, rr * 0.4f, Argb(ivory, litA), true);
+            }
+            break;
+        }
+        case 4: // smoke: soft clone columns beside the player, a lost clone disperses
+        {
+            const float offs[6] = {-0.55f, 0.55f, -1.0f, 1.0f, -1.45f, 1.45f};
+            // Sideways relative to the camera, flattened onto the ground.
+            const V3 side = norm(V3{camR.x, 0, camR.z});
+            for (int k = 0; k < std::min(n, 6); ++k)
+            {
+                const bool gone = lost(k);
+                if (!lit(k) && !gone)
+                    continue;
+                const float spread = gone ? 1.0f + 1.5f * (1.0f - sh.lostA) : 1.0f;
+                const float ka     = gone ? sh.lostA * A * 0.8f : litA;
+                const V3 base      = add(feet, mul(side, offs[k] * h));
+                constexpr int kPuffs = 14;
+                for (int i = 0; i < kPuffs; ++i)
+                {
+                    const float t  = static_cast<float>(i) / static_cast<float>(kPuffs - 1);
+                    const float ph = sh.time * 2.0f + static_cast<float>(i * 7 + k * 13);
+                    const V3 jit{std::sin(ph) * 0.05f * h * spread, 0, std::cos(ph * 1.3f) * 0.05f * h * spread};
+                    const V3 p = add(add(base, mul(up, (0.08f + 0.8f * t) * h)), jit);
+                    const float r = (0.13f + 0.05f * std::sin(ph * 0.7f)) * h * spread;
+                    dot(p, r, Argb(col, 0.3f * ka), Argb(col, 0.0f));
+                }
+                dot(add(base, mul(up, 0.95f * h)), 0.12f * h * spread, Argb(dark, 0.45f * ka), Argb(dark, 0.0f)); // head
+                Disk(base.x, base.y, base.z, 0.22f * h * spread, Argb(dark, 0.25f * ka)); // smoke pool
+            }
+            break;
+        }
+        case 5: // pips: a row of small diamonds above the head
+        {
+            const V3 anchor = add(feet, mul(up, 1.18f * sh.height));
+            const float step = 24.0f * pw * sh.size, r = 7.0f * pw * sh.size;
+            for (int k = 0; k < n; ++k)
+            {
+                const V3 p = add(anchor, mul(camR, (static_cast<float>(k) - (n - 1) * 0.5f) * step));
+                if (lost(k))
+                {
+                    diamond(p, r * (1.0f + 0.6f * (1.0f - sh.lostA)), Argb(hot, sh.lostA * A), false);
+                    continue;
+                }
+                if (lit(k) && sh.glow)
+                    diamond(p, r * 1.6f, Argb(col, 0.18f * litA), false);
+                diamond(p, r, lit(k) ? Argb(col, litA) : Argb(dark, 0.75f * A), false);
+                diamond(p, r * 0.45f, lit(k) ? Argb(ivory, litA) : Argb(grey, 0.45f * A), false);
+            }
+            break;
+        }
+        default:
+            break;
+        }
     }
 
     // Ring segment between radii rIn..rOut over angles b0..b1 (colours at the inner / outer edge).

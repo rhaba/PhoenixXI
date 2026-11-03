@@ -27,6 +27,8 @@ namespace farplaneui
         static auto __stdcall SetRenderTargetHook(IDirect3DDevice8* self, IDirect3DSurface8* target, IDirect3DSurface8* depth) -> HRESULT;
         void OnSetRenderTarget(IDirect3DDevice8* self, IDirect3DSurface8* target);
         void Draw(void);
+        void DrawRing(void);
+        void DrawShadows(void); // Utsusemi shadows around the player (ctx.shadows)
         void Strip(float cx, float cy, float cz, float rIn, float rOut, float b0, float b1, D3DCOLOR cIn, D3DCOLOR cOut);
         void Disk(float cx, float cy, float cz, float rad, D3DCOLOR c);
 

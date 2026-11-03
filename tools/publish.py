@@ -116,25 +116,32 @@ Main files:
 
 # ---------------------------------------------------------------------------------------------
 ADDONS['farplaneui'] = dict(
-    src='farplaneui_plugin', folder='farplaneui', dest='plugins', version='0.11.1', submitted='2026-11-03',
-    note='Ashita v4 plugin (C++ DLL), source included. Sends no packets. Hides and replaces parts of the game UI. Replaces 0.11.0 (submitted the same day, not yet reviewed): adds Ctrl+R reply in its chat line.',
+    src='farplaneui_plugin', folder='farplaneui', dest='plugins', version='0.11.2', submitted='2026-11-03',
+    note='Ashita v4 plugin (C++ DLL), source included. Sends no packets. Hides and replaces parts of the game UI. Replaces 0.11.0 and 0.11.1 (submitted the same day, not yet reviewed): adds Ctrl+R reply in its chat line and an optional Utsusemi shadow display.',
     summary='**Author:** Spongeh, building on the work of the XIUI creators (special thanks to Shuu for the idea of '
             'packaging many UI elements into a single load). **Program:** Ashita v4 plugin (C++). **Type:** UI replacement. It reads data '
             'the client already has or receives, draws its own interface, and hides the game\'s own versions of '
             'the parts it replaces. It sends no packets. Only active while the Farplane linkshell is equipped.',
     key_files=['plugins/FarplaneUI.dll', 'CMakeLists.txt', 'src/farplaneui.cpp', 'src/modules/mod_native.cpp',
-               'src/modules/mod_cmdmenu.cpp', 'src/modules/mod_chat.cpp', 'src/worldring.cpp', 'src/mask.cpp',
+               'src/modules/mod_cmdmenu.cpp', 'src/modules/mod_chat.cpp', 'src/modules/mod_shadows.cpp', 'src/worldring.cpp', 'src/mask.cpp',
                'src/data/quest_db.hpp', 'tools/gen_mobdb.cpp', 'tools/gen_quest_db.cpp'],
     review='''
 This is a plugin, so the source is included next to the DLL (`src/`, built with `CMakeLists.txt`).
 `plugins/FarplaneUI.dll` is the release build of exactly this source (MSVC 2022, x86 Release).
 
 ### Changes since 0.11.0
-0.11.0 was submitted earlier the same day and hasn't been reviewed; 0.11.1 replaces it. The only
-change is in `src/modules/mod_chat.cpp` (plus its declarations in `src/modules.hpp` and the version
-number in `src/farplaneui.cpp`): **Ctrl+R** (the game's "reply to last tell") opens FarplaneUI's own
-chat line prefilled with `/t <name of the last player who sent you a tell> ` instead of the game's
-input bar. The player still types the reply and presses Enter; nothing is sent automatically.
+0.11.0 and 0.11.1 were submitted earlier the same day and haven't been reviewed; 0.11.2 replaces
+them. Two additions, both display / input only:
+- **0.11.1, Ctrl+R reply** (`src/modules/mod_chat.cpp`, declarations in `src/modules.hpp`): Ctrl+R
+  (the game's "reply to last tell") opens FarplaneUI's own chat line prefilled with
+  `/t <name of the last player who sent you a tell> ` instead of the game's input bar. The player
+  still types the reply and presses Enter; nothing is sent automatically.
+- **0.11.2, Utsusemi shadow display** (new `src/modules/mod_shadows.cpp`, drawing in
+  `src/worldring.cpp`, shared state in `src/module.hpp`): shows how many Copy Image shadows you have
+  around your own character, in a style the player picks (wisps, diamond, rune ring, smoke, pips or
+  none). The count is read from your own buff list (Copy Image status ids 66 / 444 / 445 / 446), the
+  same buffs the status icons show. It is drawn in the same 3D pass as the target ring, through the
+  existing `SetRenderTarget` hook; no new hook, packet or memory write.
 
 ### What it reads
 **Incoming packets.** It only listens: packets are never changed, blocked or injected.
@@ -172,8 +179,8 @@ from Ashita's resource manager. Monster and quest data are built in (see the REA
 - **Command menu position:** optionally moves the game's own command menu windows by calling the
   game's window set-position routine; original positions are restored when disabled or unloaded.
 - **Direct3D:** draws its own interface through Ashita's ImGui and D3D8 sprites; patches the
-  device's `SetRenderTarget` vtable slot to draw the target ring inside the 3D scene (restored on
-  unload); reads the camera matrices from draw calls.
+  device's `SetRenderTarget` vtable slot to draw the target ring and the Utsusemi shadow display
+  inside the 3D scene (restored on unload); reads the camera matrices from draw calls.
 
 ### Input
 - **Keyboard:** Space or `/` opens FarplaneUI's own chat input line (Ctrl / Alt chords and other
