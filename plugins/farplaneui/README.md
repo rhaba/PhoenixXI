@@ -12,6 +12,10 @@
 
 ---
 
+[![FarplaneUI in game (YouTube)](https://img.youtube.com/vi/kyqmKKoRliw/maxresdefault.jpg)](https://www.youtube.com/watch?v=kyqmKKoRliw)
+
+**Video:** [FarplaneUI in game](https://www.youtube.com/watch?v=kyqmKKoRliw)
+
 A complete UI for the Farplane linkshell on Phoenix, in one Ashita v4 **plugin** (a C++ DLL, not a
 Lua addon), with everything it needs built in. It replaces the bottom of the screen with one glass
 dock:
