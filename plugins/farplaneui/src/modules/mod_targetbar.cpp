@@ -207,6 +207,7 @@ namespace farplaneui
 
     void TargetBarModule::Render(Context& ctx, IGuiManager* gui)
     {
+        ctx.targetBarRect = Rect{};
         if (!show_)
             return;
         auto* mm    = ctx.core->GetMemoryManager();
@@ -237,6 +238,8 @@ namespace farplaneui
         auto p = mod::BeginPanel(ctx, gui, "##fpui_targetbar", nullptr, docked_, dock, user_, locked_, 0.82f, false);
         if (p.open)
         {
+            const ImVec2 wp = gui->GetWindowPos(), ws = gui->GetWindowSize();
+            ctx.targetBarRect = Rect{wp.x, wp.y, ws.x, ws.y}; // the target debuff row sits on top of it
             if (idx == 0)
             {
                 gui->TextDisabled("No target");

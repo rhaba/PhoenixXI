@@ -552,6 +552,7 @@ namespace farplaneui
     {
         bool show_{true};
         float iconSize_{24.0f}, x_{6.0f}, y_{6.0f}; // top-left corner of the grid, like the native icons
+        float gap_{5.0f}; // space between icons (matches the game's status icon selector)
         bool locked_{true}; // unlocked: drag the icons to move them
         int perRow_{16};
         bool enterDown_{false}; // Enter edge for the game's status icon cursor (confirm = cancel the effect)
@@ -664,12 +665,15 @@ namespace farplaneui
             uintptr_t window;
             int16_t left, top, right, bottom;
             bool command{false}; // one of the command menu windows (else another game menu)
+            bool stale{false};   // rect (+0x42) not kept up to date: left / top come from the position (+0x52)
             char name[9]{};
         };
         bool enabled_{true}, editing_{false}, scanned_{false};
         bool dialogs_{true};                           // also move game menus that open over the chat
         std::unordered_map<uintptr_t, bool> dialog_;   // window -> over the chat where the game put it
         std::unordered_map<uintptr_t, uint32_t> placed_; // dialog -> the position we last moved it to
+        std::unordered_map<uintptr_t, int> height_;      // stale-rect window -> its height where the game placed it
+        std::unordered_map<uintptr_t, int> yFights_;     // frames in a row the game put a moved window's height back
         std::string log_;                              // /fpui cmdmenu log: file, empty = off
         std::string lastLog_;
         Rect user_{-1, 0, 150, 220};
@@ -699,6 +703,26 @@ namespace farplaneui
         void Load(IConfigurationManager* cfg, const char* alias) override;
         void Save(IConfigurationManager* cfg, const char* alias) const override;
         void RenderSettings(Context& ctx, IGuiManager* gui) override;
+    };
+
+    // Debuffs on your target, tracked from combat messages, as icons above the target bar (mod_mobfx.cpp).
+    class MobDebuffModule final : public IModule
+    {
+        bool show_{true};
+        std::unordered_map<uint32_t, std::map<uint16_t, double>> fx_; // monster server id -> status -> ends at
+        double sweptAt_{0};
+        void Add(uint32_t target, uint32_t buff, double seconds);
+
+    public:
+        auto Name(void) const -> const char* override { return "mobfx"; }
+        auto Title(void) const -> const char* override { return "Target Debuffs"; }
+        void Load(IConfigurationManager* cfg, const char* alias) override;
+        void Save(IConfigurationManager* cfg, const char* alias) const override;
+        void Frame(Context& ctx) override;
+        void Render(Context& ctx, IGuiManager* gui) override;
+        void RenderSettings(Context& ctx, IGuiManager* gui) override;
+        auto Command(Context& ctx, const std::vector<std::string>& args) -> bool override;
+        void IncomingPacket(Context& ctx, uint16_t id, uint32_t size, const uint8_t* data) override;
     };
 
     // Controller support for FarplaneUI's own menus (pad.hpp; /fpui pad).

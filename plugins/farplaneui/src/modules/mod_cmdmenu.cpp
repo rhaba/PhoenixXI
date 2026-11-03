@@ -125,6 +125,15 @@ namespace farplaneui
                 continue;
             Win w{win, Rd<int16_t>(win + 0x42), Rd<int16_t>(win + 0x44), Rd<int16_t>(win + 0x46), Rd<int16_t>(win + 0x48), command, {}};
             std::memcpy(w.name, name + 8, 8);
+            // Some windows keep a stale rect and only update their position (the item info box: rect 240..296 while
+            // it is drawn at y 944 - 1008, growing upward from a fixed bottom): take left / top from the position.
+            const int16_t px = Rd<int16_t>(win + 0x52), py = Rd<int16_t>(win + 0x54);
+            if (!command && (px != w.left || py != w.top) && w.right > w.left && w.bottom > w.top)
+            {
+                const int16_t rw = static_cast<int16_t>(w.right - w.left), rh = static_cast<int16_t>(w.bottom - w.top);
+                w.left = px, w.top = py, w.right = static_cast<int16_t>(px + rw), w.bottom = static_cast<int16_t>(py + rh);
+                w.stale = true;
+            }
             if (w.right > w.left && w.bottom > w.top)
                 out.push_back(w);
         }
@@ -142,7 +151,7 @@ namespace farplaneui
         auto* party = ctx.core->GetMemoryManager() != nullptr ? ctx.core->GetMemoryManager()->GetParty() : nullptr;
         const bool loggedIn = party != nullptr && party->GetMemberName(0) != nullptr && party->GetMemberName(0)[0] != '\0';
         const auto fn = reinterpret_cast<SetPos_f>(setPos_);
-        const auto all = loggedIn ? Windows() : std::vector<Win>{};
+        auto all = loggedIn ? Windows() : std::vector<Win>{};
         // Screen pixels <-> the game's UI coordinates.
         const int uiW = Rd<int16_t>(manager_ + 0x80), uiH = Rd<int16_t>(manager_ + 0x82);
         const float sx = uiW >= 320 && ctx.layout.screenW > 0 ? uiW / ctx.layout.screenW : 1.0f;
@@ -150,8 +159,22 @@ namespace farplaneui
         // A non-command menu is a "dialog" while the game has it over the chat panel. Windows not over the chat are
         // checked every frame (the game reuses some, like the item info box, and moves them onto the chat later); a
         // dialog we moved is decided again if the game moves it after us.
-        const Rect& chat = ctx.layout.chat;
+        // The area game menus must stay off: the whole Ember dock (chat, party, gear grid...), else the chat panel.
+        const Rect& chat = ctx.layout.dock.valid() ? ctx.layout.dock : ctx.layout.chat;
         const float cl = chat.x * sx, ct = chat.y * sy, cr = (chat.x + chat.w) * sx, cb = (chat.y + chat.h) * sy;
+        // Stale-rect windows: the real height, measured from where the game put the window (it grows upward to a
+        // bottom 16 UI px above the screen's), kept while we move it so the group's size doesn't follow our move.
+        for (auto& w : all)
+        {
+            if (!w.stale)
+                continue;
+            const uint32_t cur = Rd<uint32_t>(w.window + 0x52);
+            const auto pl      = placed_.find(w.window);
+            if (pl == placed_.end() || pl->second != cur) // placed by the game
+                height_[w.window] = w.top >= uiH / 2 ? std::max<int>(w.bottom - w.top, uiH - 16 - w.top) : w.bottom - w.top; // grows up from a bottom edge only when low
+            if (const auto h = height_.find(w.window); h != height_.end())
+                w.bottom = static_cast<int16_t>(w.top + h->second);
+        }
         for (const auto& w : all)
         {
             if (w.command)
@@ -162,19 +185,31 @@ namespace farplaneui
             if (!decide)
                 if (const auto pl = placed_.find(w.window); pl != placed_.end() && cur != pl->second)
                 {
+                    // Our x stuck but the game put the height back: it re-places that window's y every frame (the MP cost
+                    // box of a spell list opened from the main menu). Counted; the chat steps aside for such a window.
+                    if ((cur & 0xFFFFu) == (pl->second & 0xFFFFu))
+                        ++yFights_[w.window];
+                    else
+                        yFights_.erase(w.window);
                     decide = true; // the game moved it again: that is where it wants it now
                     placed_.erase(pl);
                     orig_.erase(w.window);
                 }
+            // Over the dock AND opened in the lower half of the screen: tall lists that start near the top and only reach down
+            // into the dock (the equipment menu's item column, inventory, bank) are never moved.
             if (decide)
-                dialog_[w.window] = FromBottom(w.name) || (chat.valid() && w.left < cr && w.right > cl && w.top < cb && w.bottom > ct);
+                dialog_[w.window] = FromBottom(w.name) ||
+                                    (chat.valid() && w.left < cr && w.right > cl && w.top < cb && w.bottom > ct && w.top >= uiH / 2);
         }
-        std::vector<Win> wins, dialogs, fromBottom;
+        std::vector<Win> wins, dialogs, fromBottom, forced;
         for (const auto& w : all)
             if (w.command)
                 wins.push_back(w);
             else if (dialogs_ && dialog_[w.window])
-                (FromBottom(w.name) ? fromBottom : dialogs).push_back(w);
+            {
+                const auto f = yFights_.find(w.window);
+                (FromBottom(w.name) ? fromBottom : (f != yFights_.end() && f->second >= 2) ? forced : dialogs).push_back(w);
+            }
         if (!log_.empty())
         {
             std::string line;
@@ -185,6 +220,18 @@ namespace farplaneui
                     Rd<int16_t>(w.window + 0x54),
                     w.command ? "command" : dialog_[w.window] ? (dialogs_ ? "dialog: moved" : "dialog (moving off)") : "left alone");
                 line += b;
+                // The spell's MP cost box: its whole window object as 16-bit words, to find what the game places it from.
+                if (std::strncmp(w.name, "subwindo", 8) == 0)
+                {
+                    line += " {subwindo words +0x00..+0xFE:";
+                    for (uintptr_t o = 0; o < 0x100; o += 2)
+                    {
+                        char d[16]{};
+                        ::sprintf_s(d, " %d", static_cast<int>(Rd<int16_t>(w.window + o)));
+                        line += d;
+                    }
+                    line += "}";
+                }
             }
             char head[96]{};
             ::sprintf_s(head, "UI %dx%d, chat %.0f,%.0f-%.0f,%.0f (UI):", uiW, uiH, static_cast<double>(cl), static_cast<double>(ct), static_cast<double>(cr),
@@ -203,6 +250,20 @@ namespace farplaneui
         }
 
         // Forget windows that closed.
+        for (auto it = yFights_.begin(); it != yFights_.end();)
+        {
+            bool open = false;
+            for (const auto& w : all)
+                open |= w.window == it->first;
+            it = open ? std::next(it) : yFights_.erase(it);
+        }
+        for (auto it = height_.begin(); it != height_.end();)
+        {
+            bool open = false;
+            for (const auto& w : all)
+                open |= w.window == it->first;
+            it = open ? std::next(it) : height_.erase(it);
+        }
         for (auto it = placed_.begin(); it != placed_.end();)
         {
             bool open = false;
@@ -244,15 +305,43 @@ namespace farplaneui
                 int left = 32767, bottom = -32768;
                 for (const auto& w : dialogs)
                     left = std::min<int>(left, w.left), bottom = std::max<int>(bottom, w.bottom);
-                const int dx = static_cast<int>(std::lround(std::clamp(user_.x * sx - left, -16000.0f, 16000.0f)));
+                // Beside the command menu when it is open (the spell list and its MP cost box side by side), else at the frame's left.
+                float anchor = user_.x * sx;
+                if (!wins.empty())
+                {
+                    int cl0 = 32767, cr0 = -32768;
+                    for (const auto& c : wins)
+                        cl0 = std::min<int>(cl0, c.left), cr0 = std::max<int>(cr0, c.right);
+                    anchor += static_cast<float>(cr0 - cl0) + 4.0f;
+                }
+                const int dx = static_cast<int>(std::lround(std::clamp(anchor - left, -16000.0f, 16000.0f)));
                 const int dy = static_cast<int>(std::lround(std::clamp((user_.y + user_.h) * sy - bottom, -16000.0f, 16000.0f)));
+                // Never push a window off screen: a group that can't fit above the frame's bottom stays where the game put it.
+                int top = 32767;
+                for (const auto& w : dialogs)
+                    top = std::min<int>(top, w.top);
+                const bool fits = top + dy >= 0;
                 for (const auto& w : dialogs)
                 {
-                    if (dx != 0 || dy != 0)
+                    if (fits && (dx != 0 || dy != 0))
                         CallSetPos(fn, w.window, w.left + dx, w.top + dy);
                     placed_[w.window] = Rd<uint32_t>(w.window + 0x52); // to tell our move from the game's next one
                 }
             }
+        }
+        // Windows whose height the game forces every frame (the MP cost box of a spell list opened from the main menu):
+        // only sideways, to the left end of the buff lane (open dock space), the height as the game keeps it.
+        for (const auto& w : forced)
+        {
+            if (orig_.find(w.window) == orig_.end())
+                orig_[w.window] = Rd<uint32_t>(w.window + 0x52);
+            const Rect& lane = ctx.layout.buffLane;
+            const int nx     = static_cast<int>(std::lround((lane.valid() ? lane.x + 8.0f : ctx.layout.screenW * 0.5f) * sx));
+            if (!enabled_ || user_.x < 0)
+                continue;
+            if (w.left != nx)
+                CallSetPos(fn, w.window, nx, w.top);
+            placed_[w.window] = Rd<uint32_t>(w.window + 0x52);
         }
         // Bottom-placed windows: x to the frame's left, the bottom edge (their y, counted from the bottom) on the frame's bottom.
         for (const auto& w : fromBottom)
@@ -414,8 +503,8 @@ namespace farplaneui
     {
         cfg::Grid g(gui, ctx);
         bool ch = g.Toggle("Move command menu", "Open the game's command menu (and Magic / Abilities lists) at the COMMAND MENU frame.", enabled_);
-        ch |= g.Toggle("Move dialog menus", "Also move any other game menu that would open over the chat (yes / no boxes, the Moogle's job list, event "
-                                             "choices) to the same frame, so the chat stays readable.", dialogs_);
+        ch |= g.Toggle("Move dialog menus", "Also move any other game menu that would open under the dock (yes / no boxes, the Moogle's job list, item "
+                                             "descriptions, a spell's MP cost) to the same frame, beside the command menu when it is open.", dialogs_);
         if (g.Button("Position", "Drag the COMMAND MENU frame shown while this page is open. Its bottom-left is where the menu opens.", "Reset"))
         {
             user_.x = -1;

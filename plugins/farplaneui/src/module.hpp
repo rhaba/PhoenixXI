@@ -200,6 +200,7 @@ namespace farplaneui
         bool settingsOpen{false};                // the settings window is showing
         bool commandMenuMoved{false};
         bool dialogsMoved{false};   // game menus over the chat are moved to the command menu frame
+        Rect targetBarRect{};       // where the target bar was drawn this frame (empty: not shown)
         // Render target tracking (worldring.cpp SetRenderTarget hook): the back buffer surface and
         // whether it is the current target. Lets the per-draw-call hooks avoid querying D3D.
         const void* backBuffer{nullptr};

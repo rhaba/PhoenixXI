@@ -63,7 +63,7 @@ namespace farplaneui
         const auto buffs = mod::PlayerBuffs(ctx);
         if (buffs.empty())
             return;
-        const float size = iconSize_, gap = 3.0f, textSize = std::max(10.0f, size * 0.46f);
+        const float size = iconSize_, gap = gap_, textSize = std::max(10.0f, size * 0.46f);
         const float cellW = size + gap, cellH = size + textSize + 3.0f;
         const int perRow  = std::max(1, perRow_);
         const int count   = static_cast<int>(buffs.size());
@@ -172,6 +172,7 @@ namespace farplaneui
         show_     = cfg->GetBool(alias, S, "show", show_);
         iconSize_ = std::clamp(cfg->GetFloat(alias, S, "iconSize2", iconSize_), 16.0f, 48.0f);
         perRow_   = std::clamp(cfg->GetInt32(alias, S, "perRow", perRow_), 4, 32);
+        gap_      = std::clamp(cfg->GetFloat(alias, S, "gap", gap_), 0.0f, 24.0f);
         x_        = cfg->GetFloat(alias, S, "x", x_);
         y_        = cfg->GetFloat(alias, S, "y", y_);
         locked_   = cfg->GetBool(alias, S, "locked", locked_);
@@ -182,6 +183,7 @@ namespace farplaneui
         ui::SetB(cfg, alias, S, "show", show_);
         ui::SetF(cfg, alias, S, "iconSize2", iconSize_);
         ui::SetI(cfg, alias, S, "perRow", perRow_);
+        ui::SetF(cfg, alias, S, "gap", gap_);
         ui::SetF(cfg, alias, S, "x", x_);
         ui::SetF(cfg, alias, S, "y", y_);
         ui::SetB(cfg, alias, S, "locked", locked_);
@@ -240,6 +242,8 @@ namespace farplaneui
         bool ch = g.Toggle("Enabled", "Your status effects in the top-left corner, with time left under each icon.", show_);
         ch |= g.Slider("Icon size", "Icon size in pixels.", iconSize_, 16.0f, 48.0f, "%.0f");
         ch |= g.Slider("Icons per row", "Wrap to a new row after this many.", perRow_, 4, 32);
+        ch |= g.Slider("Icon spacing", "Space between icons in pixels. Open the game's status icon cursor (F twice, or the controller) and adjust until each "
+                                       "icon sits centred in the game's selector box.", gap_, 0.0f, 24.0f, "%.1f");
         ch |= g.Toggle("Locked", "Turn off, then drag the icons on screen to move them.", locked_);
         ch |= g.Slider("Horizontal position", "Pixels from the left edge of the screen.", x_, 0.0f, ctx.layout.screenW - 40.0f, "%.0f");
         ch |= g.Slider("Vertical position", "Pixels from the top of the screen.", y_, 0.0f, ctx.layout.screenH - 40.0f, "%.0f");

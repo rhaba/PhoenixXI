@@ -131,7 +131,7 @@ namespace farplaneui
             {
                 const ImVec2 gp(o.x, o.y + 4 * (cell + gap) - gap + 2.0f);
                 ember::Track(ctx, gui, gp, ImVec2(gridW, t.S(t.gilH)));
-                ember::TextCenter(gui, gp.x + gridW * 0.5f, gp.y + (t.S(t.gilH) - gui->GetTextLineHeight()) * 0.5f, t.amber, g.c_str());
+                ember::TextRight(gui, gp.x + gridW - t.S(10), gp.y + (t.S(t.gilH) - gui->GetTextLineHeight()) * 0.5f, t.amber, g.c_str()); // right-aligned in its pill
                 gui->SetCursorScreenPos(ImVec2(o.x, gp.y + t.S(t.gilH)));
             }
             else

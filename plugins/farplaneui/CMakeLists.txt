@@ -50,6 +50,8 @@ set(${ASHITA_PROJECT_NAME}_src
     "src/modules/mod_quests.cpp"
     "src/modules/mod_shadows.cpp"
     "src/modules/mod_pad.cpp"
+    "src/modules/mod_mobfx.cpp"
+    "src/data/mob_debuffs.hpp"
     "src/ember.hpp"
     "src/modules/bars.cpp"
     "src/modules/common.cpp"
