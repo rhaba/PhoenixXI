@@ -1,0 +1,234 @@
+{
+  "panel_9slice": {
+    "size": [
+      216,
+      216
+    ],
+    "margins": {
+      "left": 72,
+      "top": 72,
+      "right": 72,
+      "bottom": 72
+    },
+    "content_inset": 15,
+    "note": "edges built from a 1px profile so they tile/stretch seamlessly; center is flat fill"
+  },
+  "header_crest": {
+    "status": "removed",
+    "note": "user rejected the crest above the party list"
+  },
+  "divider_flourish": {
+    "size": [
+      260,
+      68
+    ],
+    "anchor": "center"
+  },
+  "portrait_frame_square": {
+    "size": [
+      56,
+      56
+    ],
+    "portrait_window": [
+      5,
+      5,
+      46,
+      46
+    ]
+  },
+  "portrait_ring_round": {
+    "size": [
+      64,
+      64
+    ],
+    "portrait_circle_diameter": 52
+  },
+  "level_badge": {
+    "size": [
+      22,
+      22
+    ],
+    "anchor": "bottom-right of portrait ring, text centered"
+  },
+  "bar_trough_9slice": {
+    "size": [
+      48,
+      14
+    ],
+    "margins": {
+      "left": 6,
+      "right": 6,
+      "top": 4,
+      "bottom": 4
+    },
+    "fill_inset": [
+      3,
+      3,
+      3,
+      3
+    ]
+  },
+  "fill_hp_red": {
+    "size": [
+      8,
+      8
+    ],
+    "tile": "horizontal stretch/tile, stretch vertical to fill_inset height"
+  },
+  "fill_hp_green": {
+    "size": [
+      8,
+      8
+    ],
+    "tile": "horizontal stretch/tile, stretch vertical to fill_inset height"
+  },
+  "fill_mp_blue": {
+    "size": [
+      8,
+      8
+    ],
+    "tile": "horizontal stretch/tile, stretch vertical to fill_inset height"
+  },
+  "fill_tp_gold": {
+    "size": [
+      8,
+      8
+    ],
+    "tile": "horizontal stretch/tile, stretch vertical to fill_inset height"
+  },
+  "buff_ring": {
+    "size": [
+      26,
+      26
+    ],
+    "icon_circle_diameter": 18
+  },
+  "debuff_ring": {
+    "size": [
+      26,
+      26
+    ],
+    "icon_circle_diameter": 18
+  },
+  "mask_edge_center": {
+    "status": "removed",
+    "note": "user rejected the arch/pillar ornament; band top edge is rail only"
+  },
+  "mask_edge_rail": {
+    "size": [
+      16,
+      9
+    ],
+    "tile": "horizontal, full screen width, sits on band top edge"
+  },
+  "mask_band_fill": {
+    "size": [
+      8,
+      64
+    ],
+    "tile": "horizontal; stretch vertically to band height"
+  },
+  "tab_normal_9slice": {
+    "size": [
+      32,
+      20
+    ],
+    "margins": {
+      "left": 6,
+      "right": 6,
+      "top": 6,
+      "bottom": 6
+    }
+  },
+  "tab_active_9slice": {
+    "size": [
+      32,
+      20
+    ],
+    "margins": {
+      "left": 6,
+      "right": 6,
+      "top": 6,
+      "bottom": 6
+    }
+  },
+  "tab_hover_9slice": {
+    "size": [
+      32,
+      20
+    ],
+    "margins": {
+      "left": 6,
+      "right": 6,
+      "top": 6,
+      "bottom": 6
+    }
+  },
+  "scroll_track_9slice": {
+    "size": [
+      10,
+      32
+    ],
+    "margins": {
+      "left": 4,
+      "right": 4,
+      "top": 5,
+      "bottom": 5
+    }
+  },
+  "scroll_thumb_9slice": {
+    "size": [
+      10,
+      24
+    ],
+    "margins": {
+      "left": 4,
+      "right": 4,
+      "top": 5,
+      "bottom": 5
+    }
+  },
+  "icon_close": {
+    "size": [
+      16,
+      16
+    ]
+  },
+  "icon_lock": {
+    "size": [
+      16,
+      16
+    ]
+  },
+  "minimap_frame": {
+    "size": [
+      160,
+      160
+    ],
+    "map_window": [
+      14,
+      14,
+      145,
+      145
+    ],
+    "note": "window is transparent; draw map texture under it; N marker baked at top-center"
+  },
+  "compass_n_marker": {
+    "size": [
+      22,
+      24
+    ]
+  },
+  "zone_plate_9slice": {
+    "size": [
+      40,
+      18
+    ],
+    "margins": {
+      "left": 8,
+      "right": 8,
+      "top": 6,
+      "bottom": 6
+    }
+  }
+}

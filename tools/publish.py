@@ -96,7 +96,7 @@ Main files:
     with open(readme_path, 'w', encoding='utf-8', newline='\n') as fh:
         fh.write(readme)
 
-    dst = os.path.join(HERE, 'addons', a['folder'])
+    dst = os.path.join(HERE, a.get('dest', 'addons'), a['folder'])
     if os.path.isdir(dst):
         # Remove the old files, then empty folders. A folder OneDrive (or an editor) holds open
         # can't be removed on Windows; it is simply reused.
@@ -115,6 +115,94 @@ Main files:
 
 
 # ---------------------------------------------------------------------------------------------
+ADDONS['farplaneui'] = dict(
+    src='farplaneui_plugin', folder='farplaneui', dest='plugins', version='0.11.0', submitted='2026-11-03',
+    note='Ashita v4 plugin (C++ DLL), source included. Sends no packets. Hides and replaces parts of the game UI.',
+    summary='**Author:** Spongeh, building on the work of the XIUI creators (special thanks to Shuu for the idea of '
+            'packaging many UI elements into a single load). **Program:** Ashita v4 plugin (C++). **Type:** UI replacement. It reads data '
+            'the client already has or receives, draws its own interface, and hides the game\'s own versions of '
+            'the parts it replaces. It sends no packets. Only active while the Farplane linkshell is equipped.',
+    key_files=['plugins/FarplaneUI.dll', 'CMakeLists.txt', 'src/farplaneui.cpp', 'src/modules/mod_native.cpp',
+               'src/modules/mod_cmdmenu.cpp', 'src/modules/mod_chat.cpp', 'src/worldring.cpp', 'src/mask.cpp',
+               'src/data/quest_db.hpp', 'tools/gen_mobdb.cpp', 'tools/gen_quest_db.cpp'],
+    review='''
+This is a plugin, so the source is included next to the DLL (`src/`, built with `CMakeLists.txt`).
+`plugins/FarplaneUI.dll` is the release build of exactly this source (MSVC 2022, x86 Release).
+
+### What it reads
+**Incoming packets.** It only listens: packets are never changed, blocked or injected.
+
+| Packet | Used for |
+|---|---|
+| 0x028 (action) | cast bar, DPS meter (damage messages), party members' job ability recasts, monsters acting on the party (enemy list), auto-attack round timing, the target ring's TP-move / cast pulse |
+| 0x029 (battle message) | experience / skill-up notices, defeat messages |
+| 0x02D (kill message) | XP / limit / capacity points per kill |
+| 0x0D2 (treasure pool) | "item dropped" notices |
+| 0x00A (zone in) | resets per-zone state |
+| 0x056 (quest / mission log), quest ports only | which quests are current or completed (quest tracker) |
+| 0x032 / 0x034 (event start) | the zone and cutscene number, to tick off a quest step |
+
+**Client memory, through Ashita's API:** party / alliance members (name, job, HP / MP / TP, zone,
+status icons), your own status effects and their timers, ability and spell recast timers, your
+inventory counts and equipped items, the target and entity list (name, position, HP %, claim,
+model size, render flags) for the target bar, target ring, enemy list and minimap, key items
+(quest steps), and your linkshell item (the Farplane check).
+
+**Game data:** the client's map DATs (minimap), item / status / ability / spell names and icons
+from Ashita's resource manager. Monster and quest data are built in (see the README).
+
+### What it changes in the client
+- **Hides game UI elements by writing their visibility bytes every frame** (party / alliance list
+  and target frame via the hideparty addon's signatures; status icons, cast bar and the "Target"
+  window by their menu names). They are set back to visible on toggle-off and on unload.
+  While a fish is on the line (status 57) the party list hide is lifted, because the fishing
+  gauge is drawn through the same object.
+- **Native compass:** one byte of game code (the HUD's compass switch, sig
+  `33C0668B81????????483DE3000000` + 0x24) is set from 1 to 0, the same switch XIUI's Game HUD
+  uses. It is checked to be 0 or 1 before patching and restored to 1 on toggle-off and unload.
+- **Native chat log window:** its stay-open timer is held at 0 (FancyChat's method) so the log
+  stays collapsed; the chat input line keeps working.
+- **Command menu position:** optionally moves the game's own command menu windows by calling the
+  game's window set-position routine; original positions are restored when disabled or unloaded.
+- **Direct3D:** draws its own interface through Ashita's ImGui and D3D8 sprites; patches the
+  device's `SetRenderTarget` vtable slot to draw the target ring inside the 3D scene (restored on
+  unload); reads the camera matrices from draw calls.
+
+### Input
+- **Keyboard:** Space or `/` opens FarplaneUI's own chat input line (Ctrl / Alt chords and other
+  ImGui text fields are left alone). While that line is open, keys go to it, and Enter is removed
+  from what the game reads through DirectInput, so submitting a line doesn't also target something.
+- **Mouse:** only over FarplaneUI's own windows.
+
+### Commands it sends (`QueueCommand`)
+Only these, and all but the clock are a direct result of the player typing or clicking:
+- the chat line the player typed and submitted in FarplaneUI's input (same as the game's chat bar);
+- `/clock off` on load and `/clock on` on unload (hides / restores the game's clock);
+- `/ta <name>` when the player clicks a party member's row;
+- `/p ...` when the player starts or answers a ready check (`/readycheck`), and `/p|/l|/l2 ...`
+  when the player runs `/fpui dps report`.
+
+### What it does NOT do
+- **No outgoing packets.** No `AddOutgoingPacket`, no packet injection, no packet modification.
+- **No automation.** No actions, abilities, spells, trades or targeting on its own; nothing runs on
+  a timer that acts in game.
+- **No network access.** No sockets, HTTP or external programs (the Settings > Performance page can
+  open the local logs folder in Explorer when you click it).
+- **Incoming text:** chat lines are kept from the game's own log window while FarplaneUI's chat is
+  showing them (they appear in FarplaneUI's log instead); NPC dialogue modes 150 / 151 always reach
+  the game. Nothing else is blocked.
+
+### Files it writes
+`<Ashita>/config/farplaneui/farplaneui.ini` (settings), `quests_<character>.txt` (quest progress),
+and, only on request, `<Ashita>/logs/farplaneui_perf_*.log` / `farplaneui_enter.log` (diagnostics).
+
+### Information shown
+Everything comes from what the client already has or from public server data: the minimap and
+enemy list show monsters loaded in the client (the game's own draw range); the mob info window
+shows drop tables, steal lists, respawn timers and NM placeholders from PhoenixXI's public server
+repository (the same data as the mobdb 2.x addon).
+''')
+
 ADDONS['npcgil_phx'] = dict(
     status='Approved 2026-10-05', reviewed_by='Phoenix staff',
     src='npcgil_phx', folder='npcgil_phx', version='2.3.0', submitted='2026-10-02',

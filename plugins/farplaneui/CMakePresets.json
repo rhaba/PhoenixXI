@@ -1,0 +1,39 @@
+{
+    "version": 3,
+    "cmakeMinimumRequired": { "major": 3, "minor": 22, "patch": 0 },
+    "configurePresets": [
+        {
+            "name": "win-ninja",
+            "description": "Base configuration for Windows builds using Ninja + MSVC (matches the official Ashita example plugin).",
+            "hidden": true,
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/out/build/${presetName}",
+            "installDir": "${sourceDir}/out/install/${presetName}",
+            "cacheVariables": { "CMAKE_C_COMPILER": "cl.exe", "CMAKE_CXX_COMPILER": "cl.exe" },
+            "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
+        },
+        {
+            "name": "x86",
+            "hidden": true,
+            "architecture": { "value": "x86", "strategy": "external" }
+        },
+        {
+            "name": "x86-Debug",
+            "displayName": "x86 Debug",
+            "description": "Debug build for Windows (x86 / Win32).",
+            "inherits": [ "win-ninja", "x86" ],
+            "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+        },
+        {
+            "name": "x86-Release",
+            "displayName": "x86 Release",
+            "description": "Release build for Windows (x86 / Win32).",
+            "inherits": [ "win-ninja", "x86" ],
+            "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+        }
+    ],
+    "buildPresets": [
+        { "name": "x86-Debug", "configurePreset": "x86-Debug" },
+        { "name": "x86-Release", "configurePreset": "x86-Release" }
+    ]
+}
