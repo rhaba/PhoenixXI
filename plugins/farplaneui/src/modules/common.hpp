@@ -65,6 +65,8 @@ namespace farplaneui::mod
     // Name of the top-most native game menu ("menu    cmdmenu " style, trimmed), empty when none is open
     // (e.g. the command menu, trade, item lists). Signature used by many Ashita addons (XITools).
     auto TopMenuName(void) -> std::string;
+    // The game has hidden its own interface (cutscenes): 1 yes, 0 no, -1 unknown (pattern not found).
+    auto GameInterfaceHidden(void) -> int;
     // Address of that menu's header (name at +0x46), 0 when none is open. Debug / experiments.
     auto TopMenuHeader(void) -> uintptr_t;
     // The live menu object (header pointer at +4), 0 when none is open. Debug / experiments.

@@ -5,7 +5,7 @@
 
 | Version | Status | Submitted | Reviewed by | Notes |
 |---|---|---|---|---|
-| 0.11.3 | Pending review | 2026-11-03 |  | Ashita v4 plugin (C++ DLL), source included. Hides and replaces parts of the game UI. One outgoing packet: 0x0F1 (cancel a status effect), only when the player asks for it. Replaces 0.11.0 - 0.11.2 (not yet reviewed). |
+| 0.11.4 | Pending review | 2026-11-03 |  | Ashita v4 plugin (C++ DLL), source included. Hides and replaces parts of the game UI. One outgoing packet: 0x0F1 (cancel a status effect), only when the player asks for it. Replaces 0.11.0 - 0.11.3 (not yet reviewed). |
 
 **Author:** Spongeh, building on the work of the XIUI creators (special thanks to Shuu for the idea of packaging many UI elements into a single load). **Program:** Ashita v4 plugin (C++). **Type:** UI replacement. It reads data the client already has or receives, draws its own interface, and hides the game's own versions of the parts it replaces. The only packet it sends is the game's own "cancel this status effect" request, when the player right-clicks an effect or confirms it in the game's status icon cursor. Only active while the Farplane linkshell is equipped.
 <!-- /staff-approval -->
@@ -110,7 +110,7 @@ This is a plugin, so the source is included next to the DLL (`src/`, built with 
 `plugins/FarplaneUI.dll` is the release build of exactly this source (MSVC 2022, x86 Release).
 
 ### Changes since 0.11.0
-0.11.0 - 0.11.2 were submitted earlier the same day and haven't been reviewed; 0.11.3 replaces them.
+0.11.0 - 0.11.3 were submitted earlier the same day and haven't been reviewed; 0.11.4 replaces them.
 - **0.11.1, Ctrl+R reply** (`src/modules/mod_chat.cpp`, declarations in `src/modules.hpp`): Ctrl+R
   (the game's "reply to last tell") opens FarplaneUI's own chat line prefilled with
   `/t <name of the last player who sent you a tell> ` instead of the game's input bar. The player
@@ -143,6 +143,16 @@ This is a plugin, so the source is included next to the DLL (`src/`, built with 
     check also reading party lines another addon blocked (read only), notifications closing when
     answered, inventory counts, objects named on the target bar, and the game's target frame left
     visible for objects and during events.
+- **0.11.4** (display only, reads only):
+  - **The chat steps aside only for a game menu that covers it** (`src/modules/mod_chat.cpp`), instead
+    of for every menu (the auction house hid it). Reads the open menu's rectangle (menu object
+    +0x42..+0x48) and the game's menu resolution: registry values `0037` / `0038` under
+    `HKLM\SOFTWARE\PlayOnline*\SquareEnix\FinalFantasyXI`, read with `RegQueryValueExA` (Ashita answers
+    with the boot profile's `[ffxi.registry]` values). Nothing is written to the registry.
+  - **"Hide in cutscenes" only hides while the game hides its own interface** (`src/modules/common.cpp`
+    `GameInterfaceHidden`, `src/farplaneui.cpp` `InCutscene`), so talking to an NPC (also an event)
+    keeps FarplaneUI up. Reads one byte: statustimers' check, sig
+    `8B4424046A016A0050B9????????E8????????F6D81BC040C3`, object at *(sig + 10), +0xB4.
 
 ### What it reads
 **Incoming packets.** It only listens: packets are never changed, blocked or injected.
@@ -221,7 +231,7 @@ own request to cancel one of the player's own status effects (see 0.11.3 above).
 ### Files it writes
 `<Ashita>/config/farplaneui/farplaneui.ini` (settings), `quests_<character>.txt` (quest progress),
 and, only on request, diagnostics in `<Ashita>/logs/`: `farplaneui_perf_*.log`, `farplaneui_enter.log`,
-`farplaneui_pad.log`, `farplaneui_minimap.log`, `farplaneui_target.log`.
+`farplaneui_pad.log`, `farplaneui_minimap.log`, `farplaneui_target.log`, `farplaneui_menu.log`.
 
 ### Information shown
 Everything comes from what the client already has or from public server data: the minimap and
@@ -232,18 +242,18 @@ repository (the same data as the mobdb 2.x addon).
 ### Files in the reviewed version
 
 `SHA256SUMS` lists the SHA-256 of every file in this version (1554 files).
-Its own SHA-256 is `3ff33aa71b90c24950b61c5731807f79d57bf41f65aa45f1c55405e31143aa2c`.
+Its own SHA-256 is `69097b5f66e46a27f835e02aa3bf87e8248368708c284a40bf19995ce5025618`.
 
 Main files:
 
 | File | SHA-256 |
 |---|---|
-| `plugins/FarplaneUI.dll` | `24f3171555fd7517b6ea88cd8d2444b692f1d7c501101105423b93b91e04722d` |
+| `plugins/FarplaneUI.dll` | `6771f493fdfef557367ea4715a7ee6a2cf404301f5a61f47d1208a1881510c1c` |
 | `CMakeLists.txt` | `a0a4620605c586244f2e5be89b95e14a017f1fedabdd2a8e7d6bc7bb63784111` |
-| `src/farplaneui.cpp` | `405856eff04e18bd0c3bd4de09dcc281b04837dd5cd74b0618afe06739a5c3ba` |
+| `src/farplaneui.cpp` | `498ec98f790957f107f6a014e9c62192515b18ee24549b44d777c7c193bd052a` |
 | `src/modules/mod_native.cpp` | `13e66032a47fd99c9f22574d643c4cf706050ed226c83dd66aef8cf9ba90d40a` |
 | `src/modules/mod_cmdmenu.cpp` | `0ed691f082947acb37411fdd3bfb30be4057cc314a1ea3491fb6f61502a151d2` |
-| `src/modules/mod_chat.cpp` | `4870c48072a928b8176bb117fa9e93aa2c1202b12a27120239e1d4ceff9c911a` |
+| `src/modules/mod_chat.cpp` | `900a685df48bbd4e816b951c2e14a9d8fdf5bb3cf50bd883a7a81406e932ada5` |
 | `src/modules/mod_shadows.cpp` | `96d715022a01e000ea7f9fda6092c02ce198e766fa25cc64acff44861bb4f1f8` |
 | `src/modules/mod_status.cpp` | `a20821b50cb9ead83176bd44b3bc2ae50603592cde11278cba050e2c3adda551` |
 | `src/modules/mod_pad.cpp` | `284da337d28488ff731d96cdab02630a8e72a74227620ed7e33b4d96169abd76` |

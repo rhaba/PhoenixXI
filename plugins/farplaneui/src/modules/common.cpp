@@ -172,6 +172,30 @@ namespace farplaneui::mod
         (void)TopMenuName(); // ensures the scan ran
         return g_menuBase != 0 ? TopMenuHeaderAt(g_menuBase) : 0;
     }
+    // statustimers' check: sig "8B4424046A016A0050B9????????E8????????F6D81BC040C3", the object at *(sig+10),
+    // byte +0xB4 = 1 while the game's interface is hidden (cutscenes), 0 while it shows (NPC dialog included).
+    auto GameInterfaceHidden(void) -> int
+    {
+        static uintptr_t sig  = 0;
+        static bool scanned   = false;
+        if (!scanned)
+        {
+            scanned = true;
+            if (const HMODULE m = ::GetModuleHandleA("FFXiMain.dll"); m != nullptr)
+            {
+                const auto b    = reinterpret_cast<uintptr_t>(m);
+                const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(b);
+                const auto* nt  = reinterpret_cast<const IMAGE_NT_HEADERS*>(b + static_cast<uintptr_t>(dos->e_lfanew));
+                sig = Ashita::Memory::FindPattern(b, nt->OptionalHeader.SizeOfImage, "8B4424046A016A0050B9????????E8????????F6D81BC040C3", 0, 0);
+            }
+        }
+        if (sig == 0)
+            return -1;
+        const uintptr_t obj = Ashita::Memory::SafeRead<uint32_t>(sig + 10, 0u);
+        if (obj == 0)
+            return -1;
+        return Ashita::Memory::SafeRead<uint8_t>(obj + 0xB4, static_cast<uint8_t>(0)) == 1 ? 1 : 0;
+    }
     auto TopMenuName(void) -> std::string
     {
         static uintptr_t base = 0;

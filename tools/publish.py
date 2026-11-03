@@ -116,8 +116,8 @@ Main files:
 
 # ---------------------------------------------------------------------------------------------
 ADDONS['farplaneui'] = dict(
-    src='farplaneui_plugin', folder='farplaneui', dest='plugins', version='0.11.3', submitted='2026-11-03',
-    note='Ashita v4 plugin (C++ DLL), source included. Hides and replaces parts of the game UI. One outgoing packet: 0x0F1 (cancel a status effect), only when the player asks for it. Replaces 0.11.0 - 0.11.2 (not yet reviewed).',
+    src='farplaneui_plugin', folder='farplaneui', dest='plugins', version='0.11.4', submitted='2026-11-03',
+    note='Ashita v4 plugin (C++ DLL), source included. Hides and replaces parts of the game UI. One outgoing packet: 0x0F1 (cancel a status effect), only when the player asks for it. Replaces 0.11.0 - 0.11.3 (not yet reviewed).',
     summary='**Author:** Spongeh, building on the work of the XIUI creators (special thanks to Shuu for the idea of '
             'packaging many UI elements into a single load). **Program:** Ashita v4 plugin (C++). **Type:** UI replacement. It reads data '
             'the client already has or receives, draws its own interface, and hides the game\'s own versions of '
@@ -131,7 +131,7 @@ This is a plugin, so the source is included next to the DLL (`src/`, built with 
 `plugins/FarplaneUI.dll` is the release build of exactly this source (MSVC 2022, x86 Release).
 
 ### Changes since 0.11.0
-0.11.0 - 0.11.2 were submitted earlier the same day and haven't been reviewed; 0.11.3 replaces them.
+0.11.0 - 0.11.3 were submitted earlier the same day and haven't been reviewed; 0.11.4 replaces them.
 - **0.11.1, Ctrl+R reply** (`src/modules/mod_chat.cpp`, declarations in `src/modules.hpp`): Ctrl+R
   (the game's "reply to last tell") opens FarplaneUI's own chat line prefilled with
   `/t <name of the last player who sent you a tell> ` instead of the game's input bar. The player
@@ -164,6 +164,16 @@ This is a plugin, so the source is included next to the DLL (`src/`, built with 
     check also reading party lines another addon blocked (read only), notifications closing when
     answered, inventory counts, objects named on the target bar, and the game's target frame left
     visible for objects and during events.
+- **0.11.4** (display only, reads only):
+  - **The chat steps aside only for a game menu that covers it** (`src/modules/mod_chat.cpp`), instead
+    of for every menu (the auction house hid it). Reads the open menu's rectangle (menu object
+    +0x42..+0x48) and the game's menu resolution: registry values `0037` / `0038` under
+    `HKLM\\SOFTWARE\\PlayOnline*\\SquareEnix\\FinalFantasyXI`, read with `RegQueryValueExA` (Ashita answers
+    with the boot profile's `[ffxi.registry]` values). Nothing is written to the registry.
+  - **"Hide in cutscenes" only hides while the game hides its own interface** (`src/modules/common.cpp`
+    `GameInterfaceHidden`, `src/farplaneui.cpp` `InCutscene`), so talking to an NPC (also an event)
+    keeps FarplaneUI up. Reads one byte: statustimers' check, sig
+    `8B4424046A016A0050B9????????E8????????F6D81BC040C3`, object at *(sig + 10), +0xB4.
 
 ### What it reads
 **Incoming packets.** It only listens: packets are never changed, blocked or injected.
@@ -242,7 +252,7 @@ own request to cancel one of the player's own status effects (see 0.11.3 above).
 ### Files it writes
 `<Ashita>/config/farplaneui/farplaneui.ini` (settings), `quests_<character>.txt` (quest progress),
 and, only on request, diagnostics in `<Ashita>/logs/`: `farplaneui_perf_*.log`, `farplaneui_enter.log`,
-`farplaneui_pad.log`, `farplaneui_minimap.log`, `farplaneui_target.log`.
+`farplaneui_pad.log`, `farplaneui_minimap.log`, `farplaneui_target.log`, `farplaneui_menu.log`.
 
 ### Information shown
 Everything comes from what the client already has or from public server data: the minimap and

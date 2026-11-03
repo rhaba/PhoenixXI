@@ -469,6 +469,92 @@ namespace farplaneui
             inputOpen_ = false; // clicked away
     }
 
+
+    namespace
+    {
+        // The game's menu resolution ([ffxi.registry] 0037 / 0038 in the Ashita boot profile; the game reads them
+        // from the registry and Ashita answers with the profile's values). 0 = unknown.
+        auto MenuResolution(float& w, float& h) -> bool
+        {
+            static float mw = -1, mh = -1;
+            if (mw < 0)
+            {
+                mw = mh = 0;
+                const char* keys[] = {"SOFTWARE\\PlayOnlineUS\\SquareEnix\\FinalFantasyXI", "SOFTWARE\\PlayOnline\\SquareEnix\\FinalFantasyXI",
+                    "SOFTWARE\\PlayOnlineEU\\SquareEnix\\FinalFantasyXI"};
+                // The same calls the game makes (RegOpenKeyExA / RegQueryValueExA): Ashita answers those with the boot
+                // profile's values; RegGetValue goes around them.
+                for (const char* k : keys)
+                {
+                    HKEY key = nullptr;
+                    if (::RegOpenKeyExA(HKEY_LOCAL_MACHINE, k, 0, KEY_QUERY_VALUE, &key) != ERROR_SUCCESS || key == nullptr)
+                        continue;
+                    DWORD a = 0, b = 0, size = sizeof(DWORD), type = 0;
+                    const bool okA = ::RegQueryValueExA(key, "0037", nullptr, &type, reinterpret_cast<LPBYTE>(&a), &size) == ERROR_SUCCESS;
+                    size = sizeof(DWORD);
+                    const bool okB = ::RegQueryValueExA(key, "0038", nullptr, &type, reinterpret_cast<LPBYTE>(&b), &size) == ERROR_SUCCESS;
+                    ::RegCloseKey(key);
+                    if (okA && okB && a >= 320 && b >= 240)
+                    {
+                        mw = static_cast<float>(a), mh = static_cast<float>(b);
+                        break;
+                    }
+                }
+            }
+            w = mw, h = mh;
+            return mw > 0 && mh > 0;
+        }
+    } // namespace
+
+    // The open game menu's rectangle (menu object +0x42 x1, +0x44 y1, +0x46 x2, +0x48 y2 in the game's menu
+    // resolution), scaled to the screen, against the chat panel. Unknown (no rect / resolution) counts as covering,
+    // the old behaviour, so a menu is never drawn under the chat.
+    auto ChatModule::MenuCoversChat(Context& ctx, const std::string& menu) -> bool
+    {
+        const uintptr_t obj = mod::TopMenuObject();
+        float mw = 0, mh = 0;
+        bool known = false, covers = true;
+        float x1 = 0, y1 = 0, x2 = 0, y2 = 0;
+        if (obj != 0 && MenuResolution(mw, mh))
+        {
+            const int a = Ashita::Memory::SafeRead<int16_t>(obj + 0x42, static_cast<int16_t>(0)), b = Ashita::Memory::SafeRead<int16_t>(obj + 0x44, static_cast<int16_t>(0));
+            const int c = Ashita::Memory::SafeRead<int16_t>(obj + 0x46, static_cast<int16_t>(0)), d = Ashita::Memory::SafeRead<int16_t>(obj + 0x48, static_cast<int16_t>(0));
+            const float sx = ctx.layout.screenW / mw, sy = ctx.layout.screenH / mh;
+            if (c > a && d > b && c - a < 4096 && d - b < 4096)
+            {
+                x1 = a * sx, y1 = b * sy, x2 = c * sx, y2 = d * sy;
+                const Rect& r = docked_ ? ctx.layout.chat : user_;
+                known  = true;
+                covers = x1 < r.x + r.w && x2 > r.x && y1 < r.y + r.h && y2 > r.y;
+            }
+        }
+        if (!menuLog_.empty())
+        {
+            char raw[160]{};
+            int n = 0;
+            for (uintptr_t o = 0x3C; obj != 0 && o < 0x50 && n >= 0 && n < static_cast<int>(sizeof(raw)) - 8; o += 2)
+                n += ::sprintf_s(raw + n, sizeof(raw) - static_cast<size_t>(n), " %d", static_cast<int>(Ashita::Memory::SafeRead<int16_t>(obj + o, static_cast<int16_t>(0))));
+            const Rect& cr = docked_ ? ctx.layout.chat : user_;
+            char b[480]{};
+            ::sprintf_s(b, "menu \"%s\" raw int16 +0x3C..+0x4E:%s | rect %.0f,%.0f - %.0f,%.0f (screen) menu res %.0fx%.0f screen %.0fx%.0f chat %.0f,%.0f %.0fx%.0f -> %s",
+                menu.c_str(), raw, static_cast<double>(x1), static_cast<double>(y1), static_cast<double>(x2), static_cast<double>(y2), static_cast<double>(mw),
+                static_cast<double>(mh), static_cast<double>(ctx.layout.screenW), static_cast<double>(ctx.layout.screenH), static_cast<double>(cr.x),
+                static_cast<double>(cr.y), static_cast<double>(cr.w), static_cast<double>(cr.h),
+                !known ? "unknown: chat hidden" : covers ? "covers the chat: chat hidden" : "clear of the chat: chat stays");
+            if (lastMenuLine_ != b)
+            {
+                lastMenuLine_ = b;
+                FILE* f = nullptr;
+                if (::fopen_s(&f, menuLog_.c_str(), "ab") == 0 && f != nullptr)
+                {
+                    ::fprintf(f, "%llu  %s\r\n", static_cast<unsigned long long>(::GetTickCount64()), b);
+                    ::fclose(f);
+                }
+            }
+        }
+        return covers;
+    }
+
     void ChatModule::Direct3DInit(Context& ctx)
     {
         font_ = nullptr;
@@ -709,7 +795,7 @@ namespace farplaneui
             const bool moved = ctx.commandMenuMoved &&
                                (menu == "menu    playermo" || menu == "menu    magic" || menu == "menu    ability" || menu == "menu    magselec" ||
                                 menu == "menu    abiselec" || menu == "menu    mount");
-            if (!menu.empty() && !moved)
+            if (!menu.empty() && !moved && MenuCoversChat(ctx, menu))
                 return;
         }
         // The outer panel never scrolls (only the message log inside does): a wheel over the tabs used to
@@ -866,6 +952,24 @@ namespace farplaneui
         const std::string a1  = args.size() > 1 ? ui::Lower(args[1]) : std::string();
         int n = 0;
         float f = 0;
+        if (sub == "menulog")
+        {
+            if (menuLog_.empty())
+            {
+                const std::string dir = std::string(ctx.core->GetInstallPath()) + "\\logs";
+                ::CreateDirectoryA(dir.c_str(), nullptr);
+                menuLog_ = dir + "\\farplaneui_menu.log";
+                ::DeleteFileA(menuLog_.c_str());
+                lastMenuLine_.clear();
+                ctx.Print("Chat: logging game menus (and whether the chat steps aside) to " + menuLog_ + ". /fpui chat menulog again to stop.");
+            }
+            else
+            {
+                ctx.Print("Chat: menu log off. Log: " + menuLog_);
+                menuLog_.clear();
+            }
+            return true;
+        }
         if (sub == "menu")
         {
             const std::string m = mod::TopMenuName();

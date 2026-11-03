@@ -129,7 +129,9 @@ namespace farplaneui
 
         // FarplaneUI chat input line (v0.3.3)
         bool inputEnabled_{true};
-        bool yieldToMenus_{true}; // hide while a native game menu is open
+        bool yieldToMenus_{true}; // hide while a native game menu covers the chat
+        std::string menuLog_, lastMenuLine_; // /fpui chat menulog: file (empty = off)
+        auto MenuCoversChat(Context& ctx, const std::string& menu) -> bool;
         int holdMenuX_{-1};       // experiment: pin the command menu x (-1 = off)
         WPARAM swallowKey_{0};    // key that closed our input line, blocked until released
         ULONGLONG enterBlockUntil_{0}; // Enter stays hidden from DirectInput until this tick

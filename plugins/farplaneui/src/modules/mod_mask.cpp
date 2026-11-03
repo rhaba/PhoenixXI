@@ -175,7 +175,7 @@ namespace farplaneui
                 s.maskLayer = under ? "under_ui" : "over_ui";
                 changed     = true;
             }
-            changed |= g.Toggle("Hide in cutscenes", "Hide the band and panels during cutscenes and events.", s.hideInCutscenes);
+            changed |= g.Toggle("Hide in cutscenes", "Hide the band and panels during cutscenes (while the game hides its own interface). Talking to NPCs keeps the UI up.", s.hideInCutscenes);
             break;
         }
         case 2: // Size
