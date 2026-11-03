@@ -116,22 +116,23 @@ Main files:
 
 # ---------------------------------------------------------------------------------------------
 ADDONS['farplaneui'] = dict(
-    src='farplaneui_plugin', folder='farplaneui', dest='plugins', version='0.11.4', submitted='2026-11-03',
-    note='Ashita v4 plugin (C++ DLL), source included. Hides and replaces parts of the game UI. One outgoing packet: 0x0F1 (cancel a status effect), only when the player asks for it. Replaces 0.11.0 - 0.11.3 (not yet reviewed).',
+    src='farplaneui_plugin', folder='farplaneui', dest='plugins', version='0.11.6', submitted='2026-11-03',
+    note='Ashita v4 plugin (C++ DLL), source included. Hides and replaces parts of the game UI. One outgoing packet: 0x0F1 (cancel a status effect), only when the player asks for it. Replaces 0.11.0 - 0.11.4 (not yet reviewed).',
     summary='**Author:** Spongeh, building on the work of the XIUI creators (special thanks to Shuu for the idea of '
             'packaging many UI elements into a single load). **Program:** Ashita v4 plugin (C++). **Type:** UI replacement. It reads data '
             'the client already has or receives, draws its own interface, and hides the game\'s own versions of '
             'the parts it replaces. The only packet it sends is the game\'s own "cancel this status effect" request, when the player '
             'right-clicks an effect or confirms it in the game\'s status icon cursor. Only active while the Farplane linkshell is equipped.',
     key_files=['plugins/FarplaneUI.dll', 'CMakeLists.txt', 'src/farplaneui.cpp', 'src/modules/mod_native.cpp',
-               'src/modules/mod_cmdmenu.cpp', 'src/modules/mod_chat.cpp', 'src/modules/mod_shadows.cpp', 'src/modules/mod_status.cpp', 'src/modules/mod_pad.cpp', 'src/worldring.cpp', 'src/mask.cpp',
+               'src/modules/mod_cmdmenu.cpp', 'src/modules/mod_chat.cpp', 'src/modules/mod_shadows.cpp', 'src/modules/mod_status.cpp', 'src/modules/mod_pad.cpp', 'src/modules/mod_party.cpp', 'src/worldring.cpp', 'src/mask.cpp',
                'src/data/quest_db.hpp', 'tools/gen_mobdb.cpp', 'tools/gen_quest_db.cpp'],
     review='''
 This is a plugin, so the source is included next to the DLL (`src/`, built with `CMakeLists.txt`).
 `plugins/FarplaneUI.dll` is the release build of exactly this source (MSVC 2022, x86 Release).
 
 ### Changes since 0.11.0
-0.11.0 - 0.11.3 were submitted earlier the same day and haven't been reviewed; 0.11.4 replaces them.
+0.11.0 - 0.11.4 were submitted earlier the same day and haven't been reviewed; 0.11.6 replaces them
+(0.11.5 was a local test build only).
 - **0.11.1, Ctrl+R reply** (`src/modules/mod_chat.cpp`, declarations in `src/modules.hpp`): Ctrl+R
   (the game's "reply to last tell") opens FarplaneUI's own chat line prefilled with
   `/t <name of the last player who sent you a tell> ` instead of the game's input bar. The player
@@ -174,6 +175,18 @@ This is a plugin, so the source is included next to the DLL (`src/`, built with 
     `GameInterfaceHidden`, `src/farplaneui.cpp` `InCutscene`), so talking to an NPC (also an event)
     keeps FarplaneUI up. Reads one byte: statustimers' check, sig
     `8B4424046A016A0050B9????????E8????????F6D81BC040C3`, object at *(sig + 10), +0xB4.
+- **0.11.6:**
+  - **Game menus that open over the chat are moved to the COMMAND MENU frame** ("Move dialog menus",
+    `src/modules/mod_cmdmenu.cpp`): the same game set-position routine and window list the command
+    menu move already uses (no new hook or signature). Decided once per window from where the game
+    first put it; the game's own log / input windows are never moved; every moved window goes back
+    to the game's position when the option is turned off or the plugin unloads.
+  - **Party rows** (`src/modules/mod_party.cpp`, display only): HP / MP bars with their values, TP
+    line, damage ghost, faded out-of-range members, leader and level sync icons. Leader / sync come
+    from `IParty::GetMemberFlagMask` (0x04 party leader, 0x100 level sync target, as the XivParty
+    addon reads them) and `GetAlliancePartyLeaderServerId1`. The two icons are new PNGs in
+    `resources/farplaneui/ember_dock/icons/`.
+  - **Cast bar** (display only): the "Bar" style draws in the existing resting / auto-attack panel.
 
 ### What it reads
 **Incoming packets.** It only listens: packets are never changed, blocked or injected.
@@ -208,8 +221,9 @@ from Ashita's resource manager. Monster and quest data are built in (see the REA
   uses. It is checked to be 0 or 1 before patching and restored to 1 on toggle-off and unload.
 - **Native chat log window:** its stay-open timer is held at 0 (FancyChat's method) so the log
   stays collapsed; the chat input line keeps working.
-- **Command menu position:** optionally moves the game's own command menu windows by calling the
-  game's window set-position routine; original positions are restored when disabled or unloaded.
+- **Command menu position:** optionally moves the game's own command menu windows, and game menus
+  that would open over the chat, by calling the game's window set-position routine; original
+  positions are restored when disabled or unloaded.
 - **Direct3D:** draws its own interface through Ashita's ImGui and D3D8 sprites; patches the
   device's `SetRenderTarget` vtable slot to draw the target ring and the Utsusemi shadow display
   inside the 3D scene (restored on unload); reads the camera matrices from draw calls.
@@ -252,7 +266,8 @@ own request to cancel one of the player's own status effects (see 0.11.3 above).
 ### Files it writes
 `<Ashita>/config/farplaneui/farplaneui.ini` (settings), `quests_<character>.txt` (quest progress),
 and, only on request, diagnostics in `<Ashita>/logs/`: `farplaneui_perf_*.log`, `farplaneui_enter.log`,
-`farplaneui_pad.log`, `farplaneui_minimap.log`, `farplaneui_target.log`, `farplaneui_menu.log`.
+`farplaneui_pad.log`, `farplaneui_minimap.log`, `farplaneui_target.log`, `farplaneui_menu.log`,
+`farplaneui_cmdmenu.log`.
 
 ### Information shown
 Everything comes from what the client already has or from public server data: the minimap and

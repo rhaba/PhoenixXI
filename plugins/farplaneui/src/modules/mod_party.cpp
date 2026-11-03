@@ -2,6 +2,8 @@
  * Farplane UI - party module (anchored bottom-right in the mask; buffs will flow left of it).
  */
 #include "common.hpp"
+
+#include <cmath>
 #include "../ember.hpp"
 
 #include <unordered_map>
@@ -252,94 +254,244 @@ namespace farplaneui
     }
     } // namespace
 
+    // Party rows (incoming ember_dock_wiring (4) WIRING.md P1-P7): name block, then HP and MP pills with their
+    // current values and a thin TP line; no MP pill for jobs without MP (a taller HP pill instead). HP colour by
+    // health, a ghost chunk after damage, TP number + glow at 1000+, out-of-range / other-zone members faded,
+    // the current target outlined. Bars go through the Bar Style setting when it styles meters, else the Ember pill.
     void PartyModule::RenderEmber(Context& ctx, IGuiManager* gui)
     {
-        auto* party = ctx.core->GetMemoryManager()->GetParty();
+        auto* mm    = ctx.core->GetMemoryManager();
+        auto* party = mm->GetParty();
+        auto* ent   = mm->GetEntity();
         const auto& t = ember::T();
         struct M
         {
             uint32_t slot, serverId;
             std::string name, job;
-            uint32_t hp, tp;
+            uint32_t hp, mp, tp;
             float hpp, mpp;
-            bool away;
+            bool hasMp, otherZone, faded, target;
+            bool leader{false}, sync{false}; // party leader (flag 0x04 / leader id), level sync target (flag 0x100)
         };
+        // Jobs with MP (main or sub): WHM BLM RDM PLD DRK SMN BLU SCH GEO RUN.
+        auto mpJob = [](uint8_t j) { return j == 3 || j == 4 || j == 5 || j == 7 || j == 8 || j == 15 || j == 16 || j == 20 || j == 21 || j == 22; };
         std::vector<M> ms;
         const bool demo = NowSec() < testUntil_;
         if (demo)
-            ms = {{0, 0, "Retainer", "NIN8/BRD4", 1310, 1200, 0.82f, 0.40f, false}, {9, 0, "Kelz", "NIN7/MNK3", 1182, 600, 0.66f, 0.80f, false},
-                {9, 0, "Eddythegreat", "NIN7/WAR3", 1328, 300, 0.75f, 0.55f, false}, {9, 0, "Cypher", "NIN7/WHM3", 1154, 2100, 0.24f, 0.95f, false},
-                {9, 0, "Ayame", "SAM7/WAR3", 1402, 2900, 0.91f, 0.0f, false}, {9, 0, "Lyra", "RDM7/BLM3", 988, 100, 0.55f, 0.60f, false}};
+            ms = {{0, 1, "Retainer", "NIN8/BRD4", 1310, 0, 1200, 0.82f, 0.0f, false, false, false, false, true, false},
+                {9, 2, "Kelz", "WHM7/BLM3", 682, 812, 600, 0.66f, 0.80f, true, false, false, true, false, true},
+                {9, 3, "Eddythegreat", "WAR7/WHM3", 1328, 96, 300, 0.75f, 0.55f, true, false, false, false},
+                {9, 4, "Cypher", "PLD7/WAR3", 354, 220, 2100, 0.24f, 0.95f, true, false, false, false},
+                {9, 5, "Ayame", "SAM7/WAR3", 1402, 0, 2900, 0.91f, 0.0f, false, false, true, false},
+                {9, 6, "Lyra", "RDM7/BLM3", 988, 512, 100, 0.55f, 0.60f, true, true, true, false}};
         else
         {
             const uint16_t myZone = party->GetMemberZone(0);
+            auto* tgt = mm->GetTarget();
+            const uint32_t tIdx = tgt != nullptr ? tgt->GetTargetIndex(tgt->GetIsSubTargetActive() != 0 ? 1u : 0u) : 0;
+            if (myZone != ghostZone_)
+                ghost_.clear(), mpSeen_.clear(), ghostZone_ = myZone; // reset on zone
             for (uint32_t i = 0; i < 6; ++i)
             {
                 const char* name = party->GetMemberName(i);
                 if (party->GetMemberIsActive(i) == 0 || name == nullptr || name[0] == '\0')
                     continue;
                 char job[32]{};
-                const uint8_t mj = party->GetMemberMainJob(i), sj = party->GetMemberSubJob(i);
-                if (sj != 0)
-                    ::sprintf_s(job, "%s%u/%s%u", JobName(mj), party->GetMemberMainJobLevel(i), JobName(sj), party->GetMemberSubJobLevel(i));
+                const uint8_t mj = party->GetMemberMainJob(i), sj = party->GetMemberSubJob(i), sjl = party->GetMemberSubJobLevel(i);
+                if (sj != 0 && sjl != 0)
+                    ::sprintf_s(job, "%s%u/%s%u", JobName(mj), party->GetMemberMainJobLevel(i), JobName(sj), sjl);
                 else
                     ::sprintf_s(job, "%s%u", JobName(mj), party->GetMemberMainJobLevel(i));
-                ms.push_back({i, party->GetMemberServerId(i), name, job, party->GetMemberHP(i), party->GetMemberTP(i),
-                    static_cast<float>(party->GetMemberHPPercent(i)) / 100.0f, static_cast<float>(party->GetMemberMPPercent(i)) / 100.0f,
-                    party->GetMemberZone(i) != myZone});
+                const uint32_t sid = party->GetMemberServerId(i), mp = party->GetMemberMP(i);
+                const bool other = party->GetMemberZone(i) != myZone;
+                // Once a member shows MP it keeps showing for the zone (no flicker when drained to 0).
+                const bool hasMp = mpJob(mj) || (sj != 0 && sjl != 0 && mpJob(sj)) || mp > 0 || mpSeen_.count(sid) != 0;
+                if (hasMp)
+                    mpSeen_.insert(sid);
+                // Out of range: not loaded / not drawn, or past 20.8 yalms (you never are).
+                const uint32_t ti = party->GetMemberTargetIndex(i);
+                bool faded = other;
+                if (i > 0 && !other)
+                    faded = ti == 0 || ti >= 2304 || ent->GetRawEntity(ti) == nullptr || (ent->GetRenderFlags0(ti) & 0x4200u) != 0x200u ||
+                            std::sqrt(std::max(0.0f, ent->GetDistance(ti))) > 20.8f;
+                // Leader / sync: the server's party member flags (0x04 party leader, 0x100 level sync target; as XivParty
+                // reads them), the leader also by this party's leader server id.
+                const uint32_t flags = party->GetMemberFlagMask(i);
+                const bool leader    = (flags & 0x04u) != 0 || (sid != 0 && sid == party->GetAlliancePartyLeaderServerId1());
+                ms.push_back({i, sid, name, job, party->GetMemberHP(i), mp, party->GetMemberTP(i), static_cast<float>(party->GetMemberHPPercent(i)) / 100.0f,
+                    static_cast<float>(party->GetMemberMPPercent(i)) / 100.0f, hasMp, other, faded, ti != 0 && ti == tIdx, leader, (flags & 0x100u) != 0});
             }
         }
         rowsY_.clear();
         const float rowH = ctx.layout.party.h / 6.0f;
+        // Vertical layout in 1080p px for a 44 px row (40 + 4 gap), squeezed when the dock row is shorter.
+        const float k = std::min(1.0f, rowH / t.S(44.0f));
+        auto V = [&](float v) { return t.S(v) * k; };
+        // HP / MP / TP must keep their own colours: only a style that colours by meaning (Framed with "colour by
+        // meaning") is used here. Pill / Chamfer are ready-made coloured strips (every bar would look the same), so
+        // the party draws its own pill in the meaning colours instead.
+        const bool styled = mod::Bars().meters && mod::Bars().shape == 1 && mod::Bars().tint;
+        const double now  = NowSec();
+        const Rgba ivory = t.ivory, gold = ember::Hex(0xf2c45aff), track = ember::Hex(0x0a0c18c8);
+        // HP colour by health: >= 75% ember, 50-75% amber -> ember, 25-50% bad -> amber, < 25% bad.
+        auto hpColor = [&](float h) -> Rgba {
+            auto lerp = [](const Rgba& a, const Rgba& b, float f) { return Rgba{a.r + (b.r - a.r) * f, a.g + (b.g - a.g) * f, a.b + (b.b - a.b) * f, 1.0f}; };
+            if (h >= 0.75f)
+                return t.ember;
+            if (h >= 0.50f)
+                return lerp(t.amber, t.ember, (h - 0.50f) / 0.25f);
+            if (h >= 0.25f)
+                return lerp(t.bad, t.amber, (h - 0.25f) / 0.25f);
+            return t.bad;
+        };
+        // One bar: track, ghost (0 .. ghost), fill; through the bar style if it styles meters.
+        auto bar = [&](const ImVec2& pos, const ImVec2& size, float frac, float ghost, const Rgba& col, float a) {
+            frac = std::clamp(frac, 0.0f, 1.0f);
+            if (styled)
+            {
+                mod::DrawBar(ctx, gui, pos, size, frac, col, a, true);
+                if (ghost > frac) // the part just lost, over the track
+                    ember::RoundRect(gui, ImVec2(pos.x + size.x * frac, pos.y), ImVec2(size.x * (ghost - frac), size.y), Rgba{ivory.r, ivory.g, ivory.b, 0.35f * a},
+                        Rgba{0, 0, 0, 0}, 0.0f, 0.0f);
+                return;
+            }
+            ember::RoundRect(gui, pos, size, Rgba{track.r, track.g, track.b, track.a * a}, Rgba{t.edgeDim.r, t.edgeDim.g, t.edgeDim.b, t.edgeDim.a * a}, size.y * 0.5f, 1.0f);
+            if (ghost > frac)
+                ember::Bar(ctx, gui, pos, size, ghost, Rgba{ivory.r, ivory.g, ivory.b, 0.35f}, ember::TrackKind::None, a);
+            if (frac > 0.0f)
+                ember::Bar(ctx, gui, pos, size, frac, col, ember::TrackKind::None, a);
+        };
+
         auto p = mod::BeginPanel(ctx, gui, "##fpui_party", nullptr, docked_, ctx.layout.party, user_, locked_, 0.0f, false, ImGuiWindowFlags_NoScrollWithMouse);
         if (p.open)
         {
             const ImVec2 o = gui->GetWindowPos();
             const float w = ctx.layout.party.w;
             panelX_ = o.x;
-            const float nameW = t.S(t.nameW), bx = o.x + nameW, bw = w - nameW;
-            const float hpH = t.S(t.hpH), thin = std::max(2.0f, t.S(t.mpTpH));
-            const float block = t.S(t.mpTpY) + thin; // content height of one row
+            const float nameW = t.S(130.0f);
+            const float bx = o.x + nameW;
+            gui->PushFont(nullptr, std::max(9.0f, t.S(11)));
+            const float numW = gui->CalcTextSize("99999").x + t.S(6);
+            gui->PopFont();
+            const float bw = std::max(t.S(60.0f), std::min(t.S(230.0f), w - nameW - numW));
             for (size_t i = 0; i < ms.size() && i < 6; ++i)
             {
                 const M& m    = ms[i];
                 const float y = o.y + rowH * static_cast<float>(i);
-                const float c = y + std::max(0.0f, (rowH - block) * 0.5f); // content top, centred in the row
+                const float c = y + std::max(0.0f, (rowH - V(40.0f)) * 0.5f); // row content top
+                const float a = m.faded ? 0.40f : 1.0f;
                 rowsY_.push_back({m.slot, m.serverId, y, rowH});
                 if (i > 0 && ctx.white != nullptr)
                     ui::ImageAt(gui, ctx.white, ImVec2(o.x, y), ImVec2(w, 1), ImVec2(0, 0), ImVec2(1, 1), t.rowSep);
-                gui->PushFont(nullptr, std::max(11.0f, t.S(13)));
-                ember::Text(gui, ImVec2(o.x, c - t.S(2)), m.slot == 0 ? t.amber : t.ivory, Fit(gui, m.name, nameW - t.S(6)).c_str());
-                gui->PopFont();
-                gui->PushFont(nullptr, std::max(9.0f, t.S(10)));
-                ember::Text(gui, ImVec2(o.x, c + t.S(12)), t.dim, m.job.c_str());
-                gui->PopFont();
-                if (m.away)
+                // Current target: soft outline behind name + bars, and a chevron left of the name.
+                if (m.target)
                 {
-                    ember::Text(gui, ImVec2(bx, c), t.dim, "(other zone)");
-                    continue;
+                    ember::RoundRect(gui, ImVec2(o.x - t.S(4), c - V(2)), ImVec2(nameW + bw + numW + t.S(6), V(40)), ember::Hex(0xe6b47912), ember::Hex(0xe6b47978),
+                        t.S(8), 1.0f);
+                    const float cy = c + V(10), cx = o.x - t.S(12);
+                    for (int s = 0; s < 6; ++s) // 7 x 12 chevron from stacked strips
+                    {
+                        const float f = static_cast<float>(s) / 5.0f;
+                        ui::ImageAt(gui, ctx.white, ImVec2(cx + t.S(7) * f, cy - t.S(6) * (1 - f)), ImVec2(t.S(1.5f), t.S(12) * (1 - f) + t.S(1)), ImVec2(0, 0), ImVec2(1, 1),
+                            t.amber, a);
+                    }
                 }
-                const float hy = c + t.S(t.hpY) - t.S(3);
-                ember::Bar(ctx, gui, ImVec2(bx, hy), ImVec2(bw, hpH), m.hpp, m.hpp < t.lowHp ? t.emberLow : t.ember);
-                gui->PushFont(nullptr, std::max(9.0f, t.S(11)));
-                const float ty = hy + (hpH - gui->GetTextLineHeight()) * 0.5f;
-                ember::Text(gui, ImVec2(bx + t.S(8), ty), t.ivory, std::to_string(m.hp).c_str());
-                char pct[8]{};
-                ::sprintf_s(pct, "%d%%", static_cast<int>(std::lround(m.hpp * 100.0f)));
-                ember::TextRight(gui, bx + bw - t.S(8), ty, t.ivory, pct);
+                // Name block: name (13 bold), job line (10 muted); "out of range" / zone tag after the name.
+                gui->PushFont(nullptr, std::max(11.0f, t.S(13)));
+                // Leader star and level sync arrows after the name (16 px, 5 px gap; leader first).
+                const float isz  = t.S(16.0f) * std::max(0.75f, k);
+                const int icons  = (m.leader ? 1 : 0) + (m.sync ? 1 : 0);
+                const std::string nm = Fit(gui, m.name, nameW - t.S(8) - static_cast<float>(icons) * (isz + t.S(5)));
+                const float nameY = c + V(4) - t.S(2);
+                ember::Text(gui, ImVec2(o.x, nameY), Rgba{ivory.r, ivory.g, ivory.b, a}, nm.c_str());
+                float ix = o.x + gui->CalcTextSize(nm.c_str()).x + t.S(5);
+                const float iy = nameY + (gui->GetTextLineHeight() - isz) * 0.5f;
                 gui->PopFont();
-                const float my = c + t.S(t.mpTpY) - t.S(3);
-                ember::Bar(ctx, gui, ImVec2(bx, my), ImVec2(bw * t.mpSplit, thin), m.mpp, t.mp, ember::TrackKind::Faint);
-                ember::Bar(ctx, gui, ImVec2(bx + bw * t.mpSplit + t.S(6), my), ImVec2(bw * (1 - t.mpSplit) - t.S(6), thin),
-                    static_cast<float>(m.tp) / 3000.0f, m.tp >= 1000 ? t.ember : t.amber, ember::TrackKind::Faint);
+                for (const char* file : {m.leader ? "leader" : nullptr, m.sync ? "sync" : nullptr})
+                {
+                    if (file == nullptr)
+                        continue;
+                    if (IDirect3DTexture8* tex = ctx.textures->File(ctx.resourceDir + "ember_dock\\icons\\" + file + ".png"); tex != nullptr)
+                        ui::ImageAt(gui, tex, ImVec2(ix, iy), ImVec2(isz, isz), ImVec2(0, 0), ImVec2(1, 1), Rgba{1, 1, 1, 1}, a);
+                    ix += isz + t.S(5);
+                }
+                gui->PushFont(nullptr, std::max(9.0f, t.S(10)));
+                ember::Text(gui, ImVec2(o.x, c + V(22)), Rgba{t.muted.r, t.muted.g, t.muted.b, a}, m.job.c_str());
+                gui->PopFont();
+                if (m.faded)
+                {
+                    gui->PushFont(nullptr, std::max(8.0f, t.S(9)));
+                    ember::Text(gui, ImVec2(bx, c + V(31) + t.S(1)), Rgba{t.dim.r, t.dim.g, t.dim.b, 0.8f}, m.otherZone ? "other zone" : "out of range");
+                    gui->PopFont();
+                }
+                // Ghost chunk: on damage keep the old HP, hold 0.4 s, drain to the current HP over 0.6 s.
+                float ghost = m.hpp;
+                if (!m.otherZone)
+                {
+                    Ghost& g = ghost_[m.serverId];
+                    if (m.hpp < g.last - 0.001f)
+                        g.ghost = std::max(g.ghost, g.last), g.at = now; // new hit: keep the higher ghost, restart the hold
+                    else if (m.hpp > g.last)
+                        g.ghost = m.hpp; // heals snap
+                    g.last = m.hpp;
+                    const double age = now - g.at;
+                    if (age > 1.0 || g.ghost <= m.hpp)
+                        g.ghost = m.hpp;
+                    else if (age > 0.4)
+                        ghost = m.hpp + (g.ghost - m.hpp) * static_cast<float>(1.0 - (age - 0.4) / 0.6);
+                    else
+                        ghost = g.ghost;
+                }
+                const float hp = m.otherZone ? 0.0f : m.hpp;
+                const Rgba hc  = hpColor(m.hpp);
+                // Low HP pulse (0.8 - 1.0 at 1.5 Hz).
+                const float pulse = (!m.otherZone && m.hpp < 0.25f && m.hpp > 0.0f) ? 0.9f + 0.1f * static_cast<float>(std::sin(now * 6.2831853 * 1.5)) : 1.0f;
+                char num[16]{};
+                if (m.hasMp)
+                {
+                    bar(ImVec2(bx, c + V(4)), ImVec2(bw, V(9)), hp, ghost, hc, a * pulse);
+                    bar(ImVec2(bx, c + V(16)), ImVec2(bw, V(9)), m.otherZone ? 0.0f : m.mpp, 0.0f, t.mp, a);
+                    gui->PushFont(nullptr, std::max(9.0f, t.S(11)));
+                    ::sprintf_s(num, "%u", m.hp);
+                    ember::Text(gui, ImVec2(bx + bw + t.S(6), c + V(4) + (V(9) - gui->GetTextLineHeight()) * 0.5f), Rgba{ivory.r, ivory.g, ivory.b, a}, num);
+                    ::sprintf_s(num, "%u", m.mp);
+                    ember::Text(gui, ImVec2(bx + bw + t.S(6), c + V(16) + (V(9) - gui->GetTextLineHeight()) * 0.5f), Rgba{t.mp.r, t.mp.g, t.mp.b, a}, num);
+                    gui->PopFont();
+                }
+                else
+                {
+                    bar(ImVec2(bx, c + V(8)), ImVec2(bw, V(21)), hp, ghost, hc, a * pulse);
+                    gui->PushFont(nullptr, std::max(10.0f, t.S(12)));
+                    ::sprintf_s(num, "%u", m.hp);
+                    ember::Text(gui, ImVec2(bx + bw + t.S(6), c + V(8) + (V(21) - gui->GetTextLineHeight()) * 0.5f), Rgba{ivory.r, ivory.g, ivory.b, a}, num);
+                    gui->PopFont();
+                }
+                // TP: thin line, min(tp, 1000) / 1000; at 1000+ gold with a glow and the number.
+                if (!m.otherZone)
+                {
+                    const bool full = m.tp >= 1000;
+                    const float tf  = std::min(m.tp, 1000u) / 1000.0f;
+                    if (full)
+                        ember::Bar(ctx, gui, ImVec2(bx - t.S(1.5f), c + V(31) - t.S(1.5f)), ImVec2(bw + t.S(3), V(3) + t.S(3)), 1.0f, Rgba{gold.r, gold.g, gold.b, 0.30f},
+                            ember::TrackKind::None, a);
+                    bar(ImVec2(bx, c + V(31)), ImVec2(bw, std::max(2.0f, V(3))), tf, 0.0f, full ? gold : Rgba{t.amber.r, t.amber.g, t.amber.b, 0.67f}, a);
+                    if (full)
+                    {
+                        gui->PushFont(nullptr, std::max(8.0f, t.S(10)));
+                        ::sprintf_s(num, "%u", m.tp);
+                        ember::Text(gui, ImVec2(bx + bw + t.S(6), c + V(31) + V(1.5f) - gui->GetTextLineHeight() * 0.5f), Rgba{gold.r, gold.g, gold.b, a}, num);
+                        gui->PopFont();
+                    }
+                }
                 gui->SetCursorScreenPos(ImVec2(o.x, y));
                 gui->PushID(static_cast<int>(i));
                 if (gui->InvisibleButton("##member", ImVec2(w, std::max(1.0f, rowH - 2))) && !demo)
                     ctx.core->GetChatManager()->QueueCommand(-1, ("/ta " + m.name).c_str());
                 if (gui->IsItemHovered())
                 {
-                    char tip[64]{};
-                    ::sprintf_s(tip, "%s  MP %.0f%%  TP %u", m.name.c_str(), m.mpp * 100.0f, m.tp);
+                    char tip[160]{};
+                    ::sprintf_s(tip, "%s%s%s  HP %u (%.0f%%)  MP %u (%.0f%%)  TP %u", m.name.c_str(), m.leader ? "  (leader)" : "", m.sync ? "  (level sync)" : "",
+                        m.hp, m.hpp * 100.0f, m.mp, m.mpp * 100.0f, m.tp);
                     gui->SetTooltip("%s", tip);
                 }
                 gui->PopID();

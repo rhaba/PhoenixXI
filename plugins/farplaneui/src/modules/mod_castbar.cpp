@@ -76,6 +76,7 @@ namespace farplaneui
 
     void CastBarModule::Render(Context& ctx, IGuiManager* gui)
     {
+        ctx.castStrip.want = false;
         if (!show_)
             return;
         auto* mm  = ctx.core->GetMemoryManager();
@@ -122,6 +123,19 @@ namespace farplaneui
         }
         if (style_ == 0 && !ringLabel_)
             return;
+        // Bar / Both: the bar sits in the strip panel with resting / auto-attack when that panel is up.
+        if (style_ != 0 && ctx.ticksPanel)
+        {
+            auto& s = ctx.castStrip;
+            s.want  = true;
+            s.label = interrupted ? "Interrupted" : name_.empty() ? std::string("Casting") : name_;
+            char pc[16]{};
+            ::sprintf_s(pc, "%d%%", static_cast<int>(shown * 100.0f + 0.5f));
+            s.right = showPercent_ ? pc : "";
+            s.frac  = shown;
+            s.color = Rgba{fill.r, fill.g, fill.b, std::max(0.35f, alpha)};
+            return;
+        }
 
         const float w = width_, h = 10.0f;
         const float x = ctx.layout.screenW * 0.5f - w * 0.5f + offsetX_;
@@ -214,7 +228,8 @@ namespace farplaneui
         cfg::Grid g(gui, ctx);
         bool ch = g.Toggle("Enabled", "Your cast progress.", show_);
         static const char* const kStyles[] = {"Ring", "Bar", "Both"};
-        ch |= g.Choice("Style", "Ring: a ring on the ground around your feet that fills clockwise as you cast. Bar: the bar below your character. Both: ring and bar.", style_, kStyles, 3);
+        ch |= g.Choice("Style", "Ring: a ring on the ground around your feet that fills clockwise as you cast. Bar: the cast bar in the strip panel with "
+                                "resting / auto-attack (below your character if that panel is off). Both: ring and bar.", style_, kStyles, 3);
         if (style_ != 1)
         {
             ch |= g.Slider("Ring size", "Ring radius around your character.", ringSize_, 0.4f, 3.0f, "%.2f");

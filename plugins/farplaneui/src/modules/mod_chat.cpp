@@ -515,7 +515,17 @@ namespace farplaneui
         float mw = 0, mh = 0;
         bool known = false, covers = true;
         float x1 = 0, y1 = 0, x2 = 0, y2 = 0;
-        if (obj != 0 && MenuResolution(mw, mh))
+        // Windows the game places from the bottom of the screen although their rect reads as top-left (the Moogle's
+        // main / sub job list, /fpui cmdmenu log 2026-11-03): always treated as covering the chat.
+        static constexpr const char* kBottomDrawn[] = {"menu    jobcselu"};
+        bool bottomDrawn = false;
+        for (const char* n : kBottomDrawn)
+            bottomDrawn |= menu == n;
+        if (bottomDrawn && !ctx.dialogsMoved) // moved into the COMMAND MENU frame otherwise (mod_cmdmenu.cpp)
+            known = true;
+        else if (bottomDrawn)
+            known = true, covers = false;
+        else if (obj != 0 && MenuResolution(mw, mh))
         {
             const int a = Ashita::Memory::SafeRead<int16_t>(obj + 0x42, static_cast<int16_t>(0)), b = Ashita::Memory::SafeRead<int16_t>(obj + 0x44, static_cast<int16_t>(0));
             const int c = Ashita::Memory::SafeRead<int16_t>(obj + 0x46, static_cast<int16_t>(0)), d = Ashita::Memory::SafeRead<int16_t>(obj + 0x48, static_cast<int16_t>(0));

@@ -187,9 +187,19 @@ namespace farplaneui
         WorldRing ring{};
         WorldShadows shadows{};
         WorldCast cast{};
+        // Cast bar shown in the strip panel that holds resting / auto-attack (cast bar style "Bar" or "Both").
+        struct StripCast
+        {
+            bool want{false};
+            std::string label, right;
+            float frac{0};
+            Rgba color{1, 1, 1, 1};
+        } castStrip{};
+        bool ticksPanel{false}; // that strip panel is showing (set by the ticks module every frame)
         int settingsSection{0}; // section selected in the settings window (IModule::SettingsSections)
         bool settingsOpen{false};                // the settings window is showing
         bool commandMenuMoved{false};
+        bool dialogsMoved{false};   // game menus over the chat are moved to the command menu frame
         // Render target tracking (worldring.cpp SetRenderTarget hook): the back buffer surface and
         // whether it is the current target. Lets the per-draw-call hooks avoid querying D3D.
         const void* backBuffer{nullptr};

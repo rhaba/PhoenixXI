@@ -15,6 +15,10 @@
  * The command windows move together: the group's left edge goes to the frame's x and each window's
  * bottom to the frame's bottom (screen pixels scaled to the game's UI size). Original positions are
  * remembered per window and restored when disabled or unloaded.
+ * "Move dialog menus": any other game menu that opens over the chat panel (yes / no boxes, the Moogle's
+ * job list, event choices) moves to the same frame as one group, its bottom-left on the frame's
+ * bottom-left. Decided once per window from where the game first put it; the game's own log and input
+ * windows never move.
  */
 #include "common.hpp"
 
@@ -63,6 +67,19 @@ namespace farplaneui
             }
         }
         constexpr const char* kCommandWindows[] = {"playermo", "magic   ", "ability ", "magselec", "abiselec", "mount   "};
+        // The game's chat log / input and HUD windows: never moved as dialogs.
+        // Windows the game places from the bottom of the screen: their y (rect and set-position) counts up from the
+        // bottom edge (the Moogle's main / sub job list reads 48..234 and draws at 846..1032 of 1080). Moved with
+        // the y flipped: bottom edge on the frame's bottom.
+        constexpr const char* kFromBottom[] = {"jobcselu"};
+        auto FromBottom(const char* name8) -> bool
+        {
+            for (const char* c : kFromBottom)
+                if (std::strncmp(name8, c, 8) == 0)
+                    return true;
+            return false;
+        }
+        constexpr const char* kNeverMove[] = {"logwindo", "inline  ", "fulllog ", "buff    ", "compass ", "casttime", "targetwi", "party   ", "partywin"};
     } // namespace
 
     void CommandMenuModule::Scan(Context& ctx)
@@ -99,12 +116,15 @@ namespace farplaneui
                 name[i] = static_cast<char>(Rd<uint8_t>(hdr + 0x46 + static_cast<uintptr_t>(i)));
             if (std::strncmp(name, "menu    ", 8) != 0)
                 continue;
-            bool command = false;
+            bool command = false, never = false;
             for (const char* c : kCommandWindows)
                 command |= std::strncmp(name + 8, c, 8) == 0;
-            if (!command)
+            for (const char* c : kNeverMove)
+                never |= std::strncmp(name + 8, c, 8) == 0;
+            if (never)
                 continue;
-            Win w{win, Rd<int16_t>(win + 0x42), Rd<int16_t>(win + 0x44), Rd<int16_t>(win + 0x46), Rd<int16_t>(win + 0x48)};
+            Win w{win, Rd<int16_t>(win + 0x42), Rd<int16_t>(win + 0x44), Rd<int16_t>(win + 0x46), Rd<int16_t>(win + 0x48), command, {}};
+            std::memcpy(w.name, name + 8, 8);
             if (w.right > w.left && w.bottom > w.top)
                 out.push_back(w);
         }
@@ -116,21 +136,123 @@ namespace farplaneui
         if (!scanned_)
             Scan(ctx);
         ctx.commandMenuMoved = enabled_ && setPos_ != 0 && manager_ != 0;
+        ctx.dialogsMoved     = ctx.commandMenuMoved && dialogs_;
         if (setPos_ == 0 || manager_ == 0)
             return;
         auto* party = ctx.core->GetMemoryManager() != nullptr ? ctx.core->GetMemoryManager()->GetParty() : nullptr;
         const bool loggedIn = party != nullptr && party->GetMemberName(0) != nullptr && party->GetMemberName(0)[0] != '\0';
         const auto fn = reinterpret_cast<SetPos_f>(setPos_);
-        const auto wins = loggedIn ? Windows() : std::vector<Win>{};
+        const auto all = loggedIn ? Windows() : std::vector<Win>{};
+        // Screen pixels <-> the game's UI coordinates.
+        const int uiW = Rd<int16_t>(manager_ + 0x80), uiH = Rd<int16_t>(manager_ + 0x82);
+        const float sx = uiW >= 320 && ctx.layout.screenW > 0 ? uiW / ctx.layout.screenW : 1.0f;
+        const float sy = uiH >= 240 && ctx.layout.screenH > 0 ? uiH / ctx.layout.screenH : 1.0f;
+        // A non-command menu is a "dialog" if it first opened over the chat panel (decided once per window).
+        const Rect& chat = ctx.layout.chat;
+        const float cl = chat.x * sx, ct = chat.y * sy, cr = (chat.x + chat.w) * sx, cb = (chat.y + chat.h) * sy;
+        for (const auto& w : all)
+            if (!w.command && dialog_.find(w.window) == dialog_.end())
+                dialog_[w.window] = FromBottom(w.name) || (chat.valid() && w.left < cr && w.right > cl && w.top < cb && w.bottom > ct);
+        std::vector<Win> wins, dialogs, fromBottom;
+        for (const auto& w : all)
+            if (w.command)
+                wins.push_back(w);
+            else if (dialogs_ && dialog_[w.window])
+                (FromBottom(w.name) ? fromBottom : dialogs).push_back(w);
+        if (!log_.empty())
+        {
+            std::string line;
+            for (const auto& w : all)
+            {
+                char b[200]{};
+                ::sprintf_s(b, " [%s %d,%d-%d,%d pos %d,%d %s]", w.name, w.left, w.top, w.right, w.bottom, Rd<int16_t>(w.window + 0x52),
+                    Rd<int16_t>(w.window + 0x54),
+                    w.command ? "command" : dialog_[w.window] ? (dialogs_ ? "dialog: moved" : "dialog (moving off)") : "left alone");
+                line += b;
+            }
+            char head[96]{};
+            ::sprintf_s(head, "UI %dx%d, chat %.0f,%.0f-%.0f,%.0f (UI):", uiW, uiH, static_cast<double>(cl), static_cast<double>(ct), static_cast<double>(cr),
+                static_cast<double>(cb));
+            line = head + line;
+            if (line != lastLog_)
+            {
+                lastLog_ = line;
+                FILE* f = nullptr;
+                if (::fopen_s(&f, log_.c_str(), "ab") == 0 && f != nullptr)
+                {
+                    ::fprintf(f, "%llu  %s\r\n", static_cast<unsigned long long>(::GetTickCount64()), line.c_str());
+                    ::fclose(f);
+                }
+            }
+        }
 
         // Forget windows that closed.
+        for (auto it = dialog_.begin(); it != dialog_.end();)
+        {
+            bool open = false;
+            for (const auto& w : all)
+                open |= w.window == it->first;
+            it = open ? std::next(it) : dialog_.erase(it);
+        }
         for (auto it = orig_.begin(); it != orig_.end();)
         {
             bool open = false;
-            for (const auto& w : wins)
+            for (const auto& w : all)
                 open |= w.window == it->first;
             it = open ? std::next(it) : orig_.erase(it);
         }
+        for (const auto& w : dialogs)
+            if (orig_.find(w.window) == orig_.end())
+                orig_[w.window] = Rd<uint32_t>(w.window + 0x52);
+        // Dialogs: one group, bottom-left on the frame's bottom-left (or back where the game had them).
+        if (!dialogs.empty())
+        {
+            if (!enabled_ || user_.x < 0)
+            {
+                for (const auto& w : dialogs)
+                    if (Rd<uint32_t>(w.window + 0x52) != orig_[w.window])
+                    {
+                        const uint32_t o = orig_[w.window];
+                        CallSetPos(fn, w.window, static_cast<int16_t>(o & 0xFFFF), static_cast<int16_t>(o >> 16));
+                    }
+            }
+            else
+            {
+                int left = 32767, bottom = -32768;
+                for (const auto& w : dialogs)
+                    left = std::min<int>(left, w.left), bottom = std::max<int>(bottom, w.bottom);
+                const int dx = static_cast<int>(std::lround(std::clamp(user_.x * sx - left, -16000.0f, 16000.0f)));
+                const int dy = static_cast<int>(std::lround(std::clamp((user_.y + user_.h) * sy - bottom, -16000.0f, 16000.0f)));
+                if (dx != 0 || dy != 0)
+                    for (const auto& w : dialogs)
+                        CallSetPos(fn, w.window, w.left + dx, w.top + dy);
+            }
+        }
+        // Bottom-placed windows: x to the frame's left, the bottom edge (their y, counted from the bottom) on the frame's bottom.
+        for (const auto& w : fromBottom)
+        {
+            if (orig_.find(w.window) == orig_.end())
+                orig_[w.window] = Rd<uint32_t>(w.window + 0x52);
+            if (!enabled_ || user_.x < 0)
+            {
+                const uint32_t o = orig_[w.window];
+                if (Rd<uint32_t>(w.window + 0x52) != o)
+                    CallSetPos(fn, w.window, static_cast<int16_t>(o & 0xFFFF), static_cast<int16_t>(o >> 16));
+                continue;
+            }
+            const int nx = static_cast<int>(std::lround(std::clamp(user_.x * sx, -16000.0f, 16000.0f)));
+            const int ny = static_cast<int>(std::lround(std::clamp(uiH - (user_.y + user_.h) * sy, -16000.0f, 16000.0f)));
+            if (w.left != nx || w.top != ny)
+                CallSetPos(fn, w.window, nx, ny);
+        }
+        // Dialogs the option was turned off for: put back.
+        if (!dialogs_)
+            for (const auto& w : all)
+                if (!w.command && orig_.find(w.window) != orig_.end() && Rd<uint32_t>(w.window + 0x52) != orig_[w.window])
+                {
+                    const uint32_t o = orig_[w.window];
+                    CallSetPos(fn, w.window, static_cast<int16_t>(o & 0xFFFF), static_cast<int16_t>(o >> 16));
+                }
         if (wins.empty())
             return;
         for (const auto& w : wins)
@@ -148,10 +270,6 @@ namespace farplaneui
                 }
             return;
         }
-        // Screen pixels -> the game's UI coordinates.
-        const int uiW = Rd<int16_t>(manager_ + 0x80), uiH = Rd<int16_t>(manager_ + 0x82);
-        const float sx = uiW >= 320 && ctx.layout.screenW > 0 ? uiW / ctx.layout.screenW : 1.0f;
-        const float sy = uiH >= 240 && ctx.layout.screenH > 0 ? uiH / ctx.layout.screenH : 1.0f;
         int minLeft = 32767;
         for (const auto& w : wins)
             minLeft = std::min<int>(minLeft, w.left);
@@ -210,11 +328,13 @@ namespace farplaneui
     void CommandMenuModule::Load(IConfigurationManager* cfg, const char* alias)
     {
         enabled_ = cfg->GetBool(alias, "cmdmenu", "enabled", enabled_);
+        dialogs_ = cfg->GetBool(alias, "cmdmenu", "dialogs", dialogs_);
         ui::LoadRect(cfg, alias, "cmdmenu", "frame", user_);
     }
     void CommandMenuModule::Save(IConfigurationManager* cfg, const char* alias) const
     {
         ui::SetB(cfg, alias, "cmdmenu", "enabled", enabled_);
+        ui::SetB(cfg, alias, "cmdmenu", "dialogs", dialogs_);
         ui::SaveRect(cfg, alias, "cmdmenu", "frame", user_);
     }
     auto CommandMenuModule::Command(Context& ctx, const std::vector<std::string>& args) -> bool
@@ -229,6 +349,26 @@ namespace farplaneui
         }
         else if (sub == "reset")
             user_.x = -1;
+        else if (sub == "dialogs")
+            dialogs_ = args.size() > 1 ? ui::Lower(args[1]) != "off" : !dialogs_;
+        else if (sub == "log")
+        {
+            if (log_.empty())
+            {
+                const std::string dir = std::string(ctx.core->GetInstallPath()) + "\\logs";
+                ::CreateDirectoryA(dir.c_str(), nullptr);
+                log_ = dir + "\\farplaneui_cmdmenu.log";
+                ::DeleteFileA(log_.c_str());
+                lastLog_.clear();
+                ctx.Print("Command menu: logging the game's open windows to " + log_ + ". /fpui cmdmenu log again to stop.");
+            }
+            else
+            {
+                ctx.Print("Command menu: log off. Log: " + log_);
+                log_.clear();
+            }
+            return true;
+        }
         else if (sub == "status")
         {
             ctx.Print(std::string("Command menu: ") + (enabled_ ? "on" : "off") + "; set-position " + (setPos_ != 0 ? "found" : "NOT found") +
@@ -237,7 +377,7 @@ namespace farplaneui
         }
         else
         {
-            ctx.Print("/fpui cmdmenu [on|off] | edit (drag the frame) | reset | status");
+            ctx.Print("/fpui cmdmenu [on|off] | dialogs [on|off] | edit (drag the frame) | reset | status | log");
             return true;
         }
         ctx.MarkDirty();
@@ -247,6 +387,8 @@ namespace farplaneui
     {
         cfg::Grid g(gui, ctx);
         bool ch = g.Toggle("Move command menu", "Open the game's command menu (and Magic / Abilities lists) at the COMMAND MENU frame.", enabled_);
+        ch |= g.Toggle("Move dialog menus", "Also move any other game menu that would open over the chat (yes / no boxes, the Moogle's job list, event "
+                                             "choices) to the same frame, so the chat stays readable.", dialogs_);
         if (g.Button("Position", "Drag the COMMAND MENU frame shown while this page is open. Its bottom-left is where the menu opens.", "Reset"))
         {
             user_.x = -1;

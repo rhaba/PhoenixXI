@@ -5,7 +5,7 @@
 
 | Version | Status | Submitted | Reviewed by | Notes |
 |---|---|---|---|---|
-| 0.11.4 | Pending review | 2026-11-03 |  | Ashita v4 plugin (C++ DLL), source included. Hides and replaces parts of the game UI. One outgoing packet: 0x0F1 (cancel a status effect), only when the player asks for it. Replaces 0.11.0 - 0.11.3 (not yet reviewed). |
+| 0.11.6 | Pending review | 2026-11-03 |  | Ashita v4 plugin (C++ DLL), source included. Hides and replaces parts of the game UI. One outgoing packet: 0x0F1 (cancel a status effect), only when the player asks for it. Replaces 0.11.0 - 0.11.4 (not yet reviewed). |
 
 **Author:** Spongeh, building on the work of the XIUI creators (special thanks to Shuu for the idea of packaging many UI elements into a single load). **Program:** Ashita v4 plugin (C++). **Type:** UI replacement. It reads data the client already has or receives, draws its own interface, and hides the game's own versions of the parts it replaces. The only packet it sends is the game's own "cancel this status effect" request, when the player right-clicks an effect or confirms it in the game's status icon cursor. Only active while the Farplane linkshell is equipped.
 <!-- /staff-approval -->
@@ -110,7 +110,8 @@ This is a plugin, so the source is included next to the DLL (`src/`, built with 
 `plugins/FarplaneUI.dll` is the release build of exactly this source (MSVC 2022, x86 Release).
 
 ### Changes since 0.11.0
-0.11.0 - 0.11.3 were submitted earlier the same day and haven't been reviewed; 0.11.4 replaces them.
+0.11.0 - 0.11.4 were submitted earlier the same day and haven't been reviewed; 0.11.6 replaces them
+(0.11.5 was a local test build only).
 - **0.11.1, Ctrl+R reply** (`src/modules/mod_chat.cpp`, declarations in `src/modules.hpp`): Ctrl+R
   (the game's "reply to last tell") opens FarplaneUI's own chat line prefilled with
   `/t <name of the last player who sent you a tell> ` instead of the game's input bar. The player
@@ -153,6 +154,18 @@ This is a plugin, so the source is included next to the DLL (`src/`, built with 
     `GameInterfaceHidden`, `src/farplaneui.cpp` `InCutscene`), so talking to an NPC (also an event)
     keeps FarplaneUI up. Reads one byte: statustimers' check, sig
     `8B4424046A016A0050B9????????E8????????F6D81BC040C3`, object at *(sig + 10), +0xB4.
+- **0.11.6:**
+  - **Game menus that open over the chat are moved to the COMMAND MENU frame** ("Move dialog menus",
+    `src/modules/mod_cmdmenu.cpp`): the same game set-position routine and window list the command
+    menu move already uses (no new hook or signature). Decided once per window from where the game
+    first put it; the game's own log / input windows are never moved; every moved window goes back
+    to the game's position when the option is turned off or the plugin unloads.
+  - **Party rows** (`src/modules/mod_party.cpp`, display only): HP / MP bars with their values, TP
+    line, damage ghost, faded out-of-range members, leader and level sync icons. Leader / sync come
+    from `IParty::GetMemberFlagMask` (0x04 party leader, 0x100 level sync target, as the XivParty
+    addon reads them) and `GetAlliancePartyLeaderServerId1`. The two icons are new PNGs in
+    `resources/farplaneui/ember_dock/icons/`.
+  - **Cast bar** (display only): the "Bar" style draws in the existing resting / auto-attack panel.
 
 ### What it reads
 **Incoming packets.** It only listens: packets are never changed, blocked or injected.
@@ -187,8 +200,9 @@ from Ashita's resource manager. Monster and quest data are built in (see the REA
   uses. It is checked to be 0 or 1 before patching and restored to 1 on toggle-off and unload.
 - **Native chat log window:** its stay-open timer is held at 0 (FancyChat's method) so the log
   stays collapsed; the chat input line keeps working.
-- **Command menu position:** optionally moves the game's own command menu windows by calling the
-  game's window set-position routine; original positions are restored when disabled or unloaded.
+- **Command menu position:** optionally moves the game's own command menu windows, and game menus
+  that would open over the chat, by calling the game's window set-position routine; original
+  positions are restored when disabled or unloaded.
 - **Direct3D:** draws its own interface through Ashita's ImGui and D3D8 sprites; patches the
   device's `SetRenderTarget` vtable slot to draw the target ring and the Utsusemi shadow display
   inside the 3D scene (restored on unload); reads the camera matrices from draw calls.
@@ -231,7 +245,8 @@ own request to cancel one of the player's own status effects (see 0.11.3 above).
 ### Files it writes
 `<Ashita>/config/farplaneui/farplaneui.ini` (settings), `quests_<character>.txt` (quest progress),
 and, only on request, diagnostics in `<Ashita>/logs/`: `farplaneui_perf_*.log`, `farplaneui_enter.log`,
-`farplaneui_pad.log`, `farplaneui_minimap.log`, `farplaneui_target.log`, `farplaneui_menu.log`.
+`farplaneui_pad.log`, `farplaneui_minimap.log`, `farplaneui_target.log`, `farplaneui_menu.log`,
+`farplaneui_cmdmenu.log`.
 
 ### Information shown
 Everything comes from what the client already has or from public server data: the minimap and
@@ -241,22 +256,23 @@ repository (the same data as the mobdb 2.x addon).
 
 ### Files in the reviewed version
 
-`SHA256SUMS` lists the SHA-256 of every file in this version (1554 files).
-Its own SHA-256 is `69097b5f66e46a27f835e02aa3bf87e8248368708c284a40bf19995ce5025618`.
+`SHA256SUMS` lists the SHA-256 of every file in this version (1556 files).
+Its own SHA-256 is `292acc317f1b3ffb9a018b722aa575be519b46914296eb71dcac0862e03282f3`.
 
 Main files:
 
 | File | SHA-256 |
 |---|---|
-| `plugins/FarplaneUI.dll` | `6771f493fdfef557367ea4715a7ee6a2cf404301f5a61f47d1208a1881510c1c` |
+| `plugins/FarplaneUI.dll` | `f5ff529817246f8f997adf01d2acabce642685f751481cab56ab5d9e73376a9d` |
 | `CMakeLists.txt` | `a0a4620605c586244f2e5be89b95e14a017f1fedabdd2a8e7d6bc7bb63784111` |
-| `src/farplaneui.cpp` | `498ec98f790957f107f6a014e9c62192515b18ee24549b44d777c7c193bd052a` |
+| `src/farplaneui.cpp` | `201fed42da07ea2c0c9f7e527c7dff81dcd898a9437bb8ab19eb809534eaf184` |
 | `src/modules/mod_native.cpp` | `13e66032a47fd99c9f22574d643c4cf706050ed226c83dd66aef8cf9ba90d40a` |
-| `src/modules/mod_cmdmenu.cpp` | `0ed691f082947acb37411fdd3bfb30be4057cc314a1ea3491fb6f61502a151d2` |
-| `src/modules/mod_chat.cpp` | `900a685df48bbd4e816b951c2e14a9d8fdf5bb3cf50bd883a7a81406e932ada5` |
+| `src/modules/mod_cmdmenu.cpp` | `6985cae407361d9304a4cca962227755531b84c0dea33de9b1760310c3f33802` |
+| `src/modules/mod_chat.cpp` | `5c940ca1456fb7c6cfc41a9a22654619decfff83776b092d7aa9d15c519816f5` |
 | `src/modules/mod_shadows.cpp` | `96d715022a01e000ea7f9fda6092c02ce198e766fa25cc64acff44861bb4f1f8` |
 | `src/modules/mod_status.cpp` | `a20821b50cb9ead83176bd44b3bc2ae50603592cde11278cba050e2c3adda551` |
 | `src/modules/mod_pad.cpp` | `284da337d28488ff731d96cdab02630a8e72a74227620ed7e33b4d96169abd76` |
+| `src/modules/mod_party.cpp` | `3e83bc33e2bb884654bf7af377b37e76382ba201d185308e4bc0c50e50769841` |
 | `src/worldring.cpp` | `98849cf5e2dcae37436fb119a081ddebf0ffb4be1a1a8788058048fe6db41ed8` |
 | `src/mask.cpp` | `701736185c23e8678e2a8cc1211ad92f2c905d5efd7d2adeab30a2a7e20293c1` |
 | `src/data/quest_db.hpp` | `52a76bb70ef80a9365f43fc24523e06cb465b6fd39090ce11650077120ee3c7b` |

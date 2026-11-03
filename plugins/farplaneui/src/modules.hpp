@@ -69,6 +69,15 @@ namespace farplaneui
         double popHoverSince_{0}, popLast_{0};
         ImVec2 popA_{}, popB_{};
         auto Buffs(Context& ctx, uint32_t slot, uint32_t serverId) -> std::vector<uint16_t>;
+        // Party rows: HP ghost chunk per member (WIRING.md P4) and members that have shown MP this zone (P1).
+        struct Ghost
+        {
+            float last{1.0f}, ghost{1.0f};
+            double at{0};
+        };
+        std::unordered_map<uint32_t, Ghost> ghost_;
+        std::set<uint32_t> mpSeen_;
+        uint16_t ghostZone_{0xFFFF};
 
     public:
         auto Name(void) const -> const char* override { return "party"; }
@@ -653,8 +662,14 @@ namespace farplaneui
         {
             uintptr_t window;
             int16_t left, top, right, bottom;
+            bool command{false}; // one of the command menu windows (else another game menu)
+            char name[9]{};
         };
         bool enabled_{true}, editing_{false}, scanned_{false};
+        bool dialogs_{true};                           // also move game menus that open over the chat
+        std::unordered_map<uintptr_t, bool> dialog_;   // window -> opened over the chat (decided once, where the game put it)
+        std::string log_;                              // /fpui cmdmenu log: file, empty = off
+        std::string lastLog_;
         Rect user_{-1, 0, 150, 220};
         uintptr_t setPos_{0}, manager_{0};
         std::unordered_map<uintptr_t, uint32_t> orig_; // window -> position the game gave it

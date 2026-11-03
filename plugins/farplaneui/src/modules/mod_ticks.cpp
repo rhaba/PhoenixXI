@@ -152,12 +152,14 @@ namespace farplaneui
 
     void TicksModule::Render(Context& ctx, IGuiManager* gui)
     {
+        ctx.ticksPanel = show_;
         if (!show_)
             return;
         // Resting: a second line under the bar ("MP full in 42s"); the panel grows upward by it so its
         // bottom stays level with the other strip panels.
         Rect dock = ctx.layout.ticks;
-        if (resting_)
+        const bool casting = ctx.castStrip.want; // the cast bar takes the panel while you cast
+        if (resting_ && !casting)
         {
             const float extra = gui->GetTextLineHeight() + 2.0f;
             dock.y -= extra, dock.h += extra;
@@ -170,7 +172,19 @@ namespace farplaneui
             const float width = gui->GetContentRegionAvail().x;
             float frac        = 0.0f;
             Rgba barColor     = art::orb_cyan;
-            if (engaged_)
+            if (casting)
+            {
+                const auto& c = ctx.castStrip;
+                gui->TextColored(ToVec4(c.color), "%s", c.label.c_str());
+                if (!c.right.empty())
+                {
+                    gui->SameLine(std::max(0.0f, width - gui->CalcTextSize(c.right.c_str()).x));
+                    gui->TextColored(ToVec4(art::gold_hi), "%s", c.right.c_str());
+                }
+                frac     = c.frac;
+                barColor = c.color;
+            }
+            else if (engaged_)
             {
                 RenderAttack(ctx, gui, width, frac);
                 barColor = art::ember;

@@ -33,7 +33,7 @@ namespace farplaneui::ember
         // v2 (buff lane): DPS narrowed, bag gauges stacked under it, six-row party.
         float dpsW{200}, dpsHeaderH{18}, dpsRowH{20};
         float invH{19}, invGap{10}, invStackGap{3}, warnAt{0.85f}, fullAt{1.0f};
-        float partyW{300}, nameW{104}, hpH{14}, hpY{3}, mpTpY{20}, mpTpH{2.5f}, mpSplit{0.62f}, lowHp{0.30f}, buffSize{16}, buffGap{2};
+        float partyW{410}, nameW{130}, hpH{14}, hpY{3}, mpTpY{20}, mpTpH{2.5f}, mpSplit{0.62f}, lowHp{0.30f}, buffSize{16}, buffGap{2};
         // Buff lane ([ember_dock.buffs])
         float laneGapLeft{16}, laneGapRight{10}, iconSize{18}, iconCompact{14}, iconGap{2}, overflowExtra{8};
         float timerH{2}, timerGap{2}, timerLowAt{0.15f}, expireAt{0.12f}, expireSec{10};
