@@ -155,6 +155,9 @@ namespace farplaneui
         static auto __stdcall DeviceStateCallback(LPDIRECTINPUTDEVICE8A device, DWORD size, LPVOID data) -> HRESULT;
         static auto __stdcall DeviceDataCallback(LPDIRECTINPUTDEVICE8A device, DWORD objectSize, LPDIDEVICEOBJECTDATA data, LPDWORD count, DWORD flags, DWORD extra) -> HRESULT;
         static auto EnterBlocked(void) -> bool;
+        // Ctrl+R (reply): opens our line with "/t <last tell sender> " instead of the native bar.
+        std::string lastTell_;
+        static auto ReplyKeyOurs(void) -> bool;
 
         void DefaultTabs(void);
         void DefaultColors(void);

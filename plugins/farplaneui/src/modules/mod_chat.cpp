@@ -17,6 +17,7 @@
 #include "../ember.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cstring>
 
 namespace farplaneui
@@ -200,6 +201,21 @@ namespace farplaneui
             }
             return TRUE; // our line is focused: nothing reaches the game (ImGui reads its own window messages)
         }
+        // Ctrl+R: the game's "reply to last tell" opens OUR line instead, prefilled the same way.
+        if (w == 'R' && ReplyKeyOurs())
+        {
+            if (!keyUp)
+            {
+                const std::string t = c->lastTell_.empty() ? std::string("/t ") : "/t " + c->lastTell_ + " ";
+                ::strncpy_s(c->inputBuf_, t.c_str(), _TRUNCATE);
+                c->inputOpen_            = true;
+                c->inputFocus_           = true;
+                c->inputCursorEnd_       = true;
+                c->inputUnfocusedFrames_ = 0;
+                c->historyPos_           = -1;
+            }
+            return TRUE;
+        }
         auto* cm = c->core_->GetChatManager();
         if (cm != nullptr && cm->IsInputOpen() != 0)
             return FALSE; // native bar already open
@@ -238,6 +254,23 @@ namespace farplaneui
         // Just submitted and the key is still physically down (window messages can lag DirectInput).
         return c->submitAt_ != 0 && now - c->submitAt_ < 3000 && (::GetAsyncKeyState(VK_RETURN) & 0x8000) != 0;
     }
+    // Ctrl (no Alt) is held and Ctrl+R belongs to our line: chat input on and showing, the native bar
+    // closed and no other ImGui text field typing.
+    auto ChatModule::ReplyKeyOurs(void) -> bool
+    {
+        const ChatModule* c = g_chat;
+        if (c == nullptr || !c->inputEnabled_ || !c->show_ || c->core_ == nullptr)
+            return false;
+        if ((::GetAsyncKeyState(VK_CONTROL) & 0x8000) == 0 || (::GetAsyncKeyState(VK_MENU) & 0x8000) != 0)
+            return false;
+        if (c->inputOpen_)
+            return true;
+        auto* cm = c->core_->GetChatManager();
+        if (cm != nullptr && cm->IsInputOpen() != 0)
+            return false;
+        auto* gui = c->core_->GetGuiManager();
+        return gui == nullptr || !gui->GetIO().WantTextInput;
+    }
     // Enter trace for /fpui chat enterlog (one line per event, with a millisecond tick).
     void ChatModule::EnterLog(const char* fmt, ...)
     {
@@ -271,6 +304,8 @@ namespace farplaneui
                 keys[0x1C] = 0;
                 keys[0x9C] = 0;
             }
+            if ((keys[0x13] & 0x80) != 0 && ReplyKeyOurs())
+                keys[0x13] = 0; // R with Ctrl: the game's reply bar never sees it
         }
         return DI_OK;
     }
@@ -283,6 +318,11 @@ namespace farplaneui
             for (DWORD i = 0; i < *count; ++i)
             {
                 auto* e = reinterpret_cast<DIDEVICEOBJECTDATA*>(reinterpret_cast<uint8_t*>(data) + i * objectSize);
+                if (e->dwOfs == 0x13 && (e->dwData & 0x80) != 0 && ReplyKeyOurs())
+                {
+                    e->dwData = 0; // Ctrl+R press: ours
+                    continue;
+                }
                 if (e->dwOfs != 0x1C && e->dwOfs != 0x9C)
                     continue;
                 EnterLog("DI event Enter %s -> %s", (e->dwData & 0x80) != 0 ? "press" : "release", block ? "CLEARED" : "passed");
@@ -539,6 +579,16 @@ namespace farplaneui
                     continue;
                 npcRecent_.emplace_back(l.plain, tick);
             }
+            // Incoming tell ("Name>> text", maybe after a timestamp): remember the sender for Ctrl+R.
+            if (npcMode == 12)
+                if (const size_t gt = l.plain.find(">>"); gt != std::string::npos)
+                {
+                    size_t b = gt;
+                    while (b > 0 && std::isalpha(static_cast<unsigned char>(l.plain[b - 1])))
+                        --b;
+                    if (b < gt)
+                        lastTell_ = l.plain.substr(b, gt - b);
+                }
             l.segs = std::move(segs);
             lines_.push_back(std::move(l));
         }

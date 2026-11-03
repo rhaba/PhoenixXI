@@ -116,8 +116,8 @@ Main files:
 
 # ---------------------------------------------------------------------------------------------
 ADDONS['farplaneui'] = dict(
-    src='farplaneui_plugin', folder='farplaneui', dest='plugins', version='0.11.0', submitted='2026-11-03',
-    note='Ashita v4 plugin (C++ DLL), source included. Sends no packets. Hides and replaces parts of the game UI.',
+    src='farplaneui_plugin', folder='farplaneui', dest='plugins', version='0.11.1', submitted='2026-11-03',
+    note='Ashita v4 plugin (C++ DLL), source included. Sends no packets. Hides and replaces parts of the game UI. Replaces 0.11.0 (submitted the same day, not yet reviewed): adds Ctrl+R reply in its chat line.',
     summary='**Author:** Spongeh, building on the work of the XIUI creators (special thanks to Shuu for the idea of '
             'packaging many UI elements into a single load). **Program:** Ashita v4 plugin (C++). **Type:** UI replacement. It reads data '
             'the client already has or receives, draws its own interface, and hides the game\'s own versions of '
@@ -128,6 +128,13 @@ ADDONS['farplaneui'] = dict(
     review='''
 This is a plugin, so the source is included next to the DLL (`src/`, built with `CMakeLists.txt`).
 `plugins/FarplaneUI.dll` is the release build of exactly this source (MSVC 2022, x86 Release).
+
+### Changes since 0.11.0
+0.11.0 was submitted earlier the same day and hasn't been reviewed; 0.11.1 replaces it. The only
+change is in `src/modules/mod_chat.cpp` (plus its declarations in `src/modules.hpp` and the version
+number in `src/farplaneui.cpp`): **Ctrl+R** (the game's "reply to last tell") opens FarplaneUI's own
+chat line prefilled with `/t <name of the last player who sent you a tell> ` instead of the game's
+input bar. The player still types the reply and presses Enter; nothing is sent automatically.
 
 ### What it reads
 **Incoming packets.** It only listens: packets are never changed, blocked or injected.
@@ -172,6 +179,10 @@ from Ashita's resource manager. Monster and quest data are built in (see the REA
 - **Keyboard:** Space or `/` opens FarplaneUI's own chat input line (Ctrl / Alt chords and other
   ImGui text fields are left alone). While that line is open, keys go to it, and Enter is removed
   from what the game reads through DirectInput, so submitting a line doesn't also target something.
+- **Ctrl+R:** opens that line prefilled with `/t <last tell sender> ` (the name is read from incoming
+  tell lines, chat mode 12). While Ctrl+R opens FarplaneUI's line, R is removed from what the game
+  reads through DirectInput so the game's own reply bar doesn't open too. Other Ctrl / Alt chords
+  (macro palettes) are untouched.
 - **Mouse:** only over FarplaneUI's own windows.
 
 ### Commands it sends (`QueueCommand`)

@@ -5,7 +5,7 @@
 
 | Version | Status | Submitted | Reviewed by | Notes |
 |---|---|---|---|---|
-| 0.11.0 | Pending review | 2026-11-03 |  | Ashita v4 plugin (C++ DLL), source included. Sends no packets. Hides and replaces parts of the game UI. |
+| 0.11.1 | Pending review | 2026-11-03 |  | Ashita v4 plugin (C++ DLL), source included. Sends no packets. Hides and replaces parts of the game UI. Replaces 0.11.0 (submitted the same day, not yet reviewed): adds Ctrl+R reply in its chat line. |
 
 **Author:** Spongeh, building on the work of the XIUI creators (special thanks to Shuu for the idea of packaging many UI elements into a single load). **Program:** Ashita v4 plugin (C++). **Type:** UI replacement. It reads data the client already has or receives, draws its own interface, and hides the game's own versions of the parts it replaces. It sends no packets. Only active while the Farplane linkshell is equipped.
 <!-- /staff-approval -->
@@ -99,6 +99,13 @@ gen_mobdb.exe <mobdb addon folder> resources/farplaneui/mobdb
 This is a plugin, so the source is included next to the DLL (`src/`, built with `CMakeLists.txt`).
 `plugins/FarplaneUI.dll` is the release build of exactly this source (MSVC 2022, x86 Release).
 
+### Changes since 0.11.0
+0.11.0 was submitted earlier the same day and hasn't been reviewed; 0.11.1 replaces it. The only
+change is in `src/modules/mod_chat.cpp` (plus its declarations in `src/modules.hpp` and the version
+number in `src/farplaneui.cpp`): **Ctrl+R** (the game's "reply to last tell") opens FarplaneUI's own
+chat line prefilled with `/t <name of the last player who sent you a tell> ` instead of the game's
+input bar. The player still types the reply and presses Enter; nothing is sent automatically.
+
 ### What it reads
 **Incoming packets.** It only listens: packets are never changed, blocked or injected.
 
@@ -142,6 +149,10 @@ from Ashita's resource manager. Monster and quest data are built in (see the REA
 - **Keyboard:** Space or `/` opens FarplaneUI's own chat input line (Ctrl / Alt chords and other
   ImGui text fields are left alone). While that line is open, keys go to it, and Enter is removed
   from what the game reads through DirectInput, so submitting a line doesn't also target something.
+- **Ctrl+R:** opens that line prefilled with `/t <last tell sender> ` (the name is read from incoming
+  tell lines, chat mode 12). While Ctrl+R opens FarplaneUI's line, R is removed from what the game
+  reads through DirectInput so the game's own reply bar doesn't open too. Other Ctrl / Alt chords
+  (macro palettes) are untouched.
 - **Mouse:** only over FarplaneUI's own windows.
 
 ### Commands it sends (`QueueCommand`)
@@ -175,18 +186,18 @@ repository (the same data as the mobdb 2.x addon).
 ### Files in the reviewed version
 
 `SHA256SUMS` lists the SHA-256 of every file in this version (1551 files).
-Its own SHA-256 is `d5ed7cc3a3da9000b1efeb553b70bb6368bc28df8a4366ac0857db8434a1acf6`.
+Its own SHA-256 is `cc3d560f6ed32a134f90dda0fa8be69bf78e36cffb3f2260c002c89c2d34f988`.
 
 Main files:
 
 | File | SHA-256 |
 |---|---|
-| `plugins/FarplaneUI.dll` | `1fd9ab147b88fbf0baccb7f57815130cf5aac671c2de3c68c5c9b648ab4960bc` |
+| `plugins/FarplaneUI.dll` | `a999643c013b5219737adcd0d42e28c8fec7a1a858a0ada58902ed7ba3dce4cf` |
 | `CMakeLists.txt` | `912743493c34553e2668c2de49d9fb0d9fa0512260168dc2d5bfd122add08d96` |
-| `src/farplaneui.cpp` | `cf838962bb6e759733b6e252c7719a2a4f32d7911478f5c38488591a82d1a03d` |
+| `src/farplaneui.cpp` | `c4dbfe3abf2f7b4ced85fb7e9f77ada376d37f4bcaa18499f425bb1785605af7` |
 | `src/modules/mod_native.cpp` | `dfe638db6249d23c5e58e3ad5ec4975ea7aa3e5008f2d9b0531be46142ae1ad1` |
 | `src/modules/mod_cmdmenu.cpp` | `0ed691f082947acb37411fdd3bfb30be4057cc314a1ea3491fb6f61502a151d2` |
-| `src/modules/mod_chat.cpp` | `44d701686e051ee5fed1c241156bc4f44e9f9c1ce83708b82aa1a45539e8df40` |
+| `src/modules/mod_chat.cpp` | `4870c48072a928b8176bb117fa9e93aa2c1202b12a27120239e1d4ceff9c911a` |
 | `src/worldring.cpp` | `f841b993f1bb373d229685fa9aca949ec00f0a194278bb53d01da71c5a8fa3b2` |
 | `src/mask.cpp` | `44b67265b40975375ed5ca72a31cc2c984dfad67a8b15ee6dfe747191093c580` |
 | `src/data/quest_db.hpp` | `52a76bb70ef80a9365f43fc24523e06cb465b6fd39090ce11650077120ee3c7b` |
