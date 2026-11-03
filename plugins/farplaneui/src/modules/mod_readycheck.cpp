@@ -6,10 +6,12 @@
  *   ready      a member's line equal to "yes" (any case) or starting with "/" or "\"
  *   not ready  a member's line equal to "no" (any case)
  *   summary    optional "/p Players not ready: ..." from the starter when the check ends
- * Party lines arrive as "(Name) text" in chat modes 5 / 13.
+ * Party lines arrive as "(Name) text" in chat modes 5 / 13, possibly after a prefix another addon adds
+ * (timestamps): the "(Name) " is looked for anywhere in the line.
  */
 #include "common.hpp"
 
+#include <cctype>
 #include <chrono>
 
 namespace farplaneui
@@ -26,6 +28,23 @@ namespace farplaneui
             return duration<double>(steady_clock::now().time_since_epoch()).count();
         }
         auto Same(const std::string& a, const std::string& b) -> bool { return ui::Lower(a) == ui::Lower(b); }
+        // First "(Name) " in the line (letters only, as player names are): sender and the text after it.
+        auto SplitSender(const std::string& t, std::string& sender, std::string& text) -> bool
+        {
+            for (size_t open = t.find('('); open != std::string::npos; open = t.find('(', open + 1))
+            {
+                size_t j = open + 1;
+                while (j < t.size() && std::isalpha(static_cast<unsigned char>(t[j])))
+                    ++j;
+                if (j > open + 1 && t.compare(j, 2, ") ") == 0)
+                {
+                    sender = t.substr(open + 1, j - open - 1);
+                    text   = t.substr(j + 2);
+                    return true;
+                }
+            }
+            return false;
+        }
         auto Trim(std::string s) -> std::string
         {
             while (!s.empty() && (s.back() == ' ' || s.back() == '\t'))
@@ -54,6 +73,7 @@ namespace farplaneui
         startedAt_ = Now();
         active_    = true;
         open_      = true;
+        popFront_  = true;
         mine_      = party->GetMemberName(0) != nullptr && Same(party->GetMemberName(0), initiator);
         summarySent_ = false;
     }
@@ -84,24 +104,28 @@ namespace farplaneui
             return false;
         for (const auto& line : chat::Decode(ctx.core->GetChatManager(), message))
         {
-            // "(Name) text"
-            const std::string t = chat::PlainText(line);
-            const size_t open = t.find('('), close = t.find(") ");
-            if (open != 0 || close == std::string::npos)
+            // "(Name) text", maybe after a timestamp
+            std::string sender, rest;
+            if (!SplitSender(chat::PlainText(line), sender, rest))
                 continue;
-            const std::string sender = t.substr(1, close - 1);
-            const std::string text   = Trim(t.substr(close + 2));
-            if (text.rfind("Ready Check!", 0) == 0)
+            const std::string text = Trim(rest);
+            if (text.find("Ready Check!") != std::string::npos)
             {
                 Begin(ctx, sender);
+                if (!mine_)
+                    ctx.Print("Ready check from " + sender + ": answer in the box, with /readycheck yes|no, or type Yes or No in party chat.");
                 continue;
             }
             if (!active_)
                 continue;
+            // "Yes" / "No" (any case, "y" / "n", trailing punctuation ok); a line starting with / or \ is ready (XIUI).
+            std::string word = ui::Lower(text);
+            while (!word.empty() && (word.back() == '.' || word.back() == '!' || word.back() == ' '))
+                word.pop_back();
             int state = 0;
-            if (Same(text, "yes") || (!text.empty() && (text[0] == '/' || text[0] == '\\')))
+            if (word == "yes" || word == "y" || (!text.empty() && (text[0] == '/' || text[0] == '\\')))
                 state = 1;
-            else if (Same(text, "no"))
+            else if (word == "no" || word == "n")
                 state = 2;
             if (state != 0)
                 for (auto& m : members_)
@@ -147,6 +171,11 @@ namespace farplaneui
         }
         if (user_.x < 0)
             user_ = Rect{ctx.layout.screenW * 0.16f, ctx.layout.screenH * 0.18f, 230.0f, 60.0f};
+        if (popFront_)
+        {
+            gui->SetNextWindowFocus(); // pop in front of the other windows when a check starts
+            popFront_ = false;
+        }
         auto p = mod::BeginPanel(ctx, gui, "##fpui_readycheck", nullptr, false, Rect{}, user_, false, 0.88f, false, ImGuiWindowFlags_AlwaysAutoResize);
         if (p.open)
         {

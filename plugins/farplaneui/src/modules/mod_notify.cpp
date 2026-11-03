@@ -7,11 +7,15 @@
  *   treasure pool    packet 0x0D2 (item 0x10); quiet after zoning, when the pool is resent
  *   items / gil      count diff summed over every bag, so moving items between bags is silent
  *   key items, party invitations, trade requests    the game's system messages
- * Invitations stay with a countdown (party 90s, trade 30s); everything else fades after its lifetime.
+ * Invitations and trade requests show the time they arrived (HH:MM) and close when answered: an
+ * invitation when the inviter is in your party / alliance, a trade when the game sends a trade action
+ * (0x022: the trade window opening or a cancel); unanswered ones expire (party 90s, trade 30s). Everything
+ * else fades after its lifetime.
  */
 #include "common.hpp"
 
 #include <chrono>
+#include <ctime>
 
 namespace farplaneui
 {
@@ -68,11 +72,22 @@ namespace farplaneui
         constexpr Rgba kInvite{0.62f, 0.90f, 0.62f, 1};
         constexpr Rgba kTrade{0.95f, 0.65f, 0.45f, 1};
         constexpr uint32_t kBags = 17; // container ids 0..16
+        auto ClockNow(void) -> std::string
+        {
+            const std::time_t t = std::time(nullptr);
+            std::tm tm{};
+            ::localtime_s(&tm, &t);
+            char b[8]{};
+            ::sprintf_s(b, "%02d:%02d", tm.tm_hour, tm.tm_min);
+            return b;
+        }
     } // namespace
 
     void NotifyModule::Push(Note n)
     {
         n.born = Now();
+        if (n.countdown)
+            n.clock = ClockNow();
         if (n.expires == 0)
             n.expires = n.born + lifetime_;
         notes_.push_back(std::move(n));
@@ -114,10 +129,10 @@ namespace farplaneui
             Push({"+250 gil", art::gold_hi, 0xFFFF});
             Push({"Treasure: Fire Crystal", kItem, 4096});
             Note inv{"Party Invitation: Retainer", kInvite, 0};
-            inv.countdown = true, inv.expires = Now() + 90;
+            inv.countdown = true, inv.expires = Now() + 90, inv.kind = 1, inv.who = "Retainer";
             Push(inv);
             Note tr{"Trade Request: Retainer", kTrade, 0};
-            tr.countdown = true, tr.expires = Now() + 30;
+            tr.countdown = true, tr.expires = Now() + 30, tr.kind = 2, tr.who = "Retainer";
             Push(tr);
             return true;
         }
@@ -162,6 +177,11 @@ namespace farplaneui
         if (data == nullptr || party == nullptr)
             return;
         const uint32_t me = party->GetMemberServerId(0);
+        if (id == 0x022) // trade action: the request was answered (window opened, or cancelled)
+        {
+            notes_.erase(std::remove_if(notes_.begin(), notes_.end(), [](const Note& n) { return n.kind == 2; }), notes_.end());
+            return;
+        }
         if (id == 0x00A) // zone in: bags and the treasure pool are resent
         {
             quietUntil_ = Now() + 10.0;
@@ -216,13 +236,13 @@ namespace farplaneui
             {
                 const bool alliance = t.find("alliance") != std::string::npos;
                 Note n{std::string(alliance ? "Alliance Invitation: " : "Party Invitation: ") + t.substr(0, p), kInvite, 0};
-                n.countdown = true, n.expires = Now() + 90.0;
+                n.countdown = true, n.expires = Now() + 90.0, n.kind = 1, n.who = t.substr(0, p);
                 Push(n);
             }
             else if (on_[kTradeType] && (p = t.find(" wishes to trade with you")) != std::string::npos)
             {
                 Note n{"Trade Request: " + t.substr(0, p), kTrade, 0};
-                n.countdown = true, n.expires = Now() + 30.0;
+                n.countdown = true, n.expires = Now() + 30.0, n.kind = 2, n.who = t.substr(0, p);
                 Push(n);
             }
         }
@@ -233,11 +253,23 @@ namespace farplaneui
     void NotifyModule::Frame(Context& ctx)
     {
         const double now = Now();
-        while (!notes_.empty() && now > notes_.front().expires)
-            notes_.pop_front();
+        // Expired ones go, wherever they are (invitations outlive the notes around them).
+        notes_.erase(std::remove_if(notes_.begin(), notes_.end(), [&](const Note& n) { return now > n.expires; }), notes_.end());
         if (now - lastScan_ < 0.5)
             return;
         lastScan_ = now;
+        // Accepted invitation: the inviter is now in your party / alliance.
+        if (auto* party = ctx.core->GetMemoryManager() != nullptr ? ctx.core->GetMemoryManager()->GetParty() : nullptr; party != nullptr)
+            notes_.erase(std::remove_if(notes_.begin(), notes_.end(),
+                             [&](const Note& n) {
+                                 if (n.kind != 1 || n.who.empty())
+                                     return false;
+                                 for (uint32_t s = 1; s < 18; ++s)
+                                     if (party->GetMemberIsActive(s) != 0 && party->GetMemberName(s) != nullptr && _stricmp(party->GetMemberName(s), n.who.c_str()) == 0)
+                                         return true;
+                                 return false;
+                             }),
+                notes_.end());
         auto* inv = ctx.core->GetMemoryManager() != nullptr ? ctx.core->GetMemoryManager()->GetInventory() : nullptr;
         if (inv == nullptr)
             return;
@@ -245,8 +277,8 @@ namespace farplaneui
         uint32_t total = 0;
         for (uint32_t c = 0; c < kBags; ++c)
         {
-            const uint32_t n = std::min<uint32_t>(inv->GetContainerCountMax(c), 81);
-            for (uint32_t i = c == 0 ? 1u : 0u; i < n; ++i)
+            const uint32_t n = std::min<uint32_t>(inv->GetContainerCountMax(c), 80); // slots 1..max (slot 0: gil)
+            for (uint32_t i = c == 0 ? 1u : 0u; i <= n; ++i)
             {
                 const auto* it = inv->GetContainerItem(c, i);
                 if (it != nullptr && it->Id != 0 && it->Id != 0xFFFF && it->Count > 0)
@@ -304,13 +336,8 @@ namespace farplaneui
                 // Fade in over 0.2s, out over the last second.
                 const float alpha = static_cast<float>(std::clamp(std::min((now - n.born) / 0.2, n.expires - now), 0.0, 1.0));
                 std::string text = n.text;
-                if (n.countdown)
-                {
-                    const int s = static_cast<int>(std::ceil(std::max(0.0, n.expires - now)));
-                    char b[16]{};
-                    ::sprintf_s(b, " (%d:%02d)", s / 60, s % 60);
-                    text += b;
-                }
+                if (n.countdown && !n.clock.empty())
+                    text += " (" + n.clock + ")";
                 const float tw = gui->CalcTextSize(text.c_str()).x;
                 float x = right - icon - 6.0f - tw;
                 // Soft backing so the text reads on bright ground.

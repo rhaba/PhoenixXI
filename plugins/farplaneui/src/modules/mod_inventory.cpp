@@ -110,15 +110,16 @@ namespace farplaneui
                 const uint32_t slots = inv->GetContainerCountMax(b.id);
                 if (slots == 0)
                     continue; // locked / not unlocked on this character
-                // Slot 0 of every container is reserved (gil in the inventory); usable capacity is max - 1.
+                // The game's max is the usable slot count (30 for a 30-slot bag); items sit in slots 1..max,
+                // slot 0 is reserved (gil in the inventory).
                 uint32_t used = 0;
-                for (uint32_t i = 1; i < slots; ++i)
+                for (uint32_t i = b.id == 0 ? 1u : 0u; i <= slots && i <= 80; ++i)
                 {
                     const auto* it = inv->GetContainerItem(b.id, i);
                     if (it != nullptr && it->Id != 0 && it->Id != 0xFFFF)
                         ++used;
                 }
-                rows.push_back({b.title, used, slots - 1});
+                rows.push_back({b.title, used, slots});
             }
             // Ember: one gauge pill per bag, side by side (amber from 85% full, red when full).
             if (ember::On())

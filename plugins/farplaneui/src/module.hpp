@@ -152,6 +152,33 @@ namespace farplaneui
         Rgba color{0.81f, 0.45f, 0.24f, 1.0f};
         float size{1.0f}, opacity{1.0f};
         bool glow{true};
+        // Depth (WIRING.md D2-D6): 0 always on top, 1 split (in front of your body: no depth test; behind:
+        // depth-tested, crossfaded at the sides), 2 everything depth-tested.
+        int depthMode{1};
+        float crossfade{0.15f};
+        // Blink shimmer (K1-K4); drawn when blinkA > 0. The module resolves the phases into these.
+        float blinkA{0};              // overall alpha (opacity, Utsusemi dim, fade-in)
+        float blinkCondense{0};       // cast: 1 -> 0, motes start further out
+        float blinkDissipate{0};      // wear-off: 0 -> 1, motes rise, spread, fade
+        float blinkRipple{-1};        // hit: 0 -> 1 progress, -1 none
+        float blinkFlash{0};          // ivory flash on cast
+        float blinkTime{0};           // drift / twinkle clock
+        int blinkMotes{200};
+        float blinkSize{1.0f}, veilAlpha{0.08f};
+        Rgba blinkColor{0.55f, 0.90f, 1.0f, 1.0f}, blinkAccent{0.95f, 0.94f, 0.90f, 1.0f};
+    };
+
+    // Cast ring around the player's feet (cast bar "Ring" style), drawn in the 3D scene by the host.
+    struct WorldCast
+    {
+        bool want{false};
+        float x{0}, y{0}, z{0};   // feet, game world (up is -Y)
+        float radius{0.9f};       // yalms
+        float progress{0};        // 0..1, filled clockwise from the direction you face
+        float yaw{0};             // your facing, as IEntity reports it
+        float alpha{1}, grow{0};  // fade, and 0..1 expansion of the finish flash
+        Rgba color{0.45f, 0.62f, 0.95f, 1.0f};
+        bool flash{false};        // finished: full ring flashing out
     };
 
     struct Context
@@ -159,6 +186,7 @@ namespace farplaneui
         Camera camera{};
         WorldRing ring{};
         WorldShadows shadows{};
+        WorldCast cast{};
         int settingsSection{0}; // section selected in the settings window (IModule::SettingsSections)
         bool settingsOpen{false};                // the settings window is showing
         bool commandMenuMoved{false};
@@ -235,6 +263,8 @@ namespace farplaneui
             (void)ctx; (void)mode; (void)message; (void)injected;
             return false;
         }
+        // Also read lines another plugin / addon already blocked (read-only modules, e.g. the ready check).
+        virtual auto ReadsBlockedText(void) const -> bool { return false; }
         virtual void IncomingPacket(Context& ctx, uint16_t id, uint32_t size, const uint8_t* data)
         {
             (void)ctx; (void)id; (void)size; (void)data;

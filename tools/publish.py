@@ -116,22 +116,22 @@ Main files:
 
 # ---------------------------------------------------------------------------------------------
 ADDONS['farplaneui'] = dict(
-    src='farplaneui_plugin', folder='farplaneui', dest='plugins', version='0.11.2', submitted='2026-11-03',
-    note='Ashita v4 plugin (C++ DLL), source included. Sends no packets. Hides and replaces parts of the game UI. Replaces 0.11.0 and 0.11.1 (submitted the same day, not yet reviewed): adds Ctrl+R reply in its chat line and an optional Utsusemi shadow display.',
+    src='farplaneui_plugin', folder='farplaneui', dest='plugins', version='0.11.3', submitted='2026-11-03',
+    note='Ashita v4 plugin (C++ DLL), source included. Hides and replaces parts of the game UI. One outgoing packet: 0x0F1 (cancel a status effect), only when the player asks for it. Replaces 0.11.0 - 0.11.2 (not yet reviewed).',
     summary='**Author:** Spongeh, building on the work of the XIUI creators (special thanks to Shuu for the idea of '
             'packaging many UI elements into a single load). **Program:** Ashita v4 plugin (C++). **Type:** UI replacement. It reads data '
             'the client already has or receives, draws its own interface, and hides the game\'s own versions of '
-            'the parts it replaces. It sends no packets. Only active while the Farplane linkshell is equipped.',
+            'the parts it replaces. The only packet it sends is the game\'s own "cancel this status effect" request, when the player '
+            'right-clicks an effect or confirms it in the game\'s status icon cursor. Only active while the Farplane linkshell is equipped.',
     key_files=['plugins/FarplaneUI.dll', 'CMakeLists.txt', 'src/farplaneui.cpp', 'src/modules/mod_native.cpp',
-               'src/modules/mod_cmdmenu.cpp', 'src/modules/mod_chat.cpp', 'src/modules/mod_shadows.cpp', 'src/worldring.cpp', 'src/mask.cpp',
+               'src/modules/mod_cmdmenu.cpp', 'src/modules/mod_chat.cpp', 'src/modules/mod_shadows.cpp', 'src/modules/mod_status.cpp', 'src/modules/mod_pad.cpp', 'src/worldring.cpp', 'src/mask.cpp',
                'src/data/quest_db.hpp', 'tools/gen_mobdb.cpp', 'tools/gen_quest_db.cpp'],
     review='''
 This is a plugin, so the source is included next to the DLL (`src/`, built with `CMakeLists.txt`).
 `plugins/FarplaneUI.dll` is the release build of exactly this source (MSVC 2022, x86 Release).
 
 ### Changes since 0.11.0
-0.11.0 and 0.11.1 were submitted earlier the same day and haven't been reviewed; 0.11.2 replaces
-them. Two additions, both display / input only:
+0.11.0 - 0.11.2 were submitted earlier the same day and haven't been reviewed; 0.11.3 replaces them.
 - **0.11.1, Ctrl+R reply** (`src/modules/mod_chat.cpp`, declarations in `src/modules.hpp`): Ctrl+R
   (the game's "reply to last tell") opens FarplaneUI's own chat line prefilled with
   `/t <name of the last player who sent you a tell> ` instead of the game's input bar. The player
@@ -142,6 +142,28 @@ them. Two additions, both display / input only:
   none). The count is read from your own buff list (Copy Image status ids 66 / 444 / 445 / 446), the
   same buffs the status icons show. It is drawn in the same 3D pass as the target ring, through the
   existing `SetRenderTarget` hook; no new hook, packet or memory write.
+- **0.11.3:**
+  - **Cancel a status effect (the one outgoing packet).** Right-clicking one of FarplaneUI's
+    status icons, or pressing confirm (Enter / the controller's confirm button) while the game's own
+    status icon cursor is on it, sends packet **0x0F1** with that status id: the game's own "cancel
+    this effect" request, byte for byte what the statustimers addon sends. Only for effects the game
+    marks as cancellable (`IStatusIcon::CanCancel`), and only on that click / press
+    (`src/modules/mod_status.cpp`). The game's cursor position is read from its "menu    buff" menu
+    object (+0x4C).
+  - **Controller navigation of FarplaneUI's settings** (new `src/modules/mod_pad.cpp`, `src/pad.hpp`,
+    `src/cfgui.cpp`): read through Ashita's DirectInput controller callback. While FarplaneUI's
+    settings window is open from the controller, that callback returns TRUE for the D-pad, the
+    buttons and the left stick, so the game doesn't also act on them; released as soon as the window
+    closes. `/fpui pad game on|off` (typed by the player) calls Ashita's
+    `IInputManager::SetDisableGamepad`.
+  - **Display only:** Blink shimmer and a front / behind split for the shadow effects (the front part
+    is drawn as screen-space triangles when the scene is finished: `src/worldring.cpp` `DrawFront`,
+    called from the mask's existing under-UI draw), a cast ring around the player's feet, warning
+    colours on the target ring while the target readies a move or casts, Ctrl + mouse wheel zoom on
+    the minimap (Ashita's mouse callback; TRUE only for that wheel event over the map), the ready
+    check also reading party lines another addon blocked (read only), notifications closing when
+    answered, inventory counts, objects named on the target bar, and the game's target frame left
+    visible for objects and during events.
 
 ### What it reads
 **Incoming packets.** It only listens: packets are never changed, blocked or injected.
@@ -190,7 +212,10 @@ from Ashita's resource manager. Monster and quest data are built in (see the REA
   tell lines, chat mode 12). While Ctrl+R opens FarplaneUI's line, R is removed from what the game
   reads through DirectInput so the game's own reply bar doesn't open too. Other Ctrl / Alt chords
   (macro palettes) are untouched.
-- **Mouse:** only over FarplaneUI's own windows.
+- **Mouse:** only over FarplaneUI's own windows. Ctrl + mouse wheel over the minimap zooms it (that
+  wheel event is kept from the game).
+- **Controller:** see "Changes since 0.11.0" (0.11.3). Buttons, D-pad and left stick are held from
+  the game only while FarplaneUI's settings window is being driven by the controller.
 
 ### Commands it sends (`QueueCommand`)
 Only these, and all but the clock are a direct result of the player typing or clicking:
@@ -200,8 +225,12 @@ Only these, and all but the clock are a direct result of the player typing or cl
 - `/p ...` when the player starts or answers a ready check (`/readycheck`), and `/p|/l|/l2 ...`
   when the player runs `/fpui dps report`.
 
+### Outgoing packets
+Exactly one, and only on a player's click / press: **0x0F1** (8 bytes, status id at +4), the game's
+own request to cancel one of the player's own status effects (see 0.11.3 above). No other
+`AddOutgoingPacket`, no packet injection, no packet modification.
+
 ### What it does NOT do
-- **No outgoing packets.** No `AddOutgoingPacket`, no packet injection, no packet modification.
 - **No automation.** No actions, abilities, spells, trades or targeting on its own; nothing runs on
   a timer that acts in game.
 - **No network access.** No sockets, HTTP or external programs (the Settings > Performance page can
@@ -212,7 +241,8 @@ Only these, and all but the clock are a direct result of the player typing or cl
 
 ### Files it writes
 `<Ashita>/config/farplaneui/farplaneui.ini` (settings), `quests_<character>.txt` (quest progress),
-and, only on request, `<Ashita>/logs/farplaneui_perf_*.log` / `farplaneui_enter.log` (diagnostics).
+and, only on request, diagnostics in `<Ashita>/logs/`: `farplaneui_perf_*.log`, `farplaneui_enter.log`,
+`farplaneui_pad.log`, `farplaneui_minimap.log`, `farplaneui_target.log`.
 
 ### Information shown
 Everything comes from what the client already has or from public server data: the minimap and

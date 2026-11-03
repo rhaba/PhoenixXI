@@ -22,13 +22,19 @@ namespace farplaneui
         void Uninstall(void);
         // True while our own draw is running (the host skips its draw-call hooks).
         auto Drawing(void) const -> bool { return drawing_; }
+        // Draws this frame's FRONT batch of the shadow effects on the back buffer, once the 3D scene is
+        // finished (called by the mask at the start of the game's UI): nothing in the scene, your own
+        // character included, can paint over it.
+        void DrawFront(void);
 
     private:
         static auto __stdcall SetRenderTargetHook(IDirect3DDevice8* self, IDirect3DSurface8* target, IDirect3DSurface8* depth) -> HRESULT;
         void OnSetRenderTarget(IDirect3DDevice8* self, IDirect3DSurface8* target);
         void Draw(void);
+        void SetupStates(void);
         void DrawRing(void);
         void DrawShadows(void); // Utsusemi shadows around the player (ctx.shadows)
+        void DrawCast(void);    // cast ring around the player (ctx.cast)
         void Strip(float cx, float cy, float cz, float rIn, float rOut, float b0, float b1, D3DCOLOR cIn, D3DCOLOR cOut);
         void Disk(float cx, float cy, float cz, float rad, D3DCOLOR c);
 

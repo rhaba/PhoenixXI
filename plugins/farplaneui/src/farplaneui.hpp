@@ -44,6 +44,7 @@ namespace farplaneui
         float chatWidth_{0.38f}; // [layout] chat width as a fraction of the screen
 
         bool show_settings_window_{false};
+        bool padNav_{false}; // the settings window is being driven by the controller
         int settingsModule_{0}, settingsSection_{0};
         bool reported_{false};
         bool active_{false}, gateNotified_{false}; // linkshell gate (lsgate.hpp)

@@ -10,6 +10,7 @@
  */
 
 #include "cfgui.hpp"
+#include "pad.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -71,12 +72,47 @@ namespace farplaneui::cfg
             return std::pow(10.0f, -static_cast<float>(decimals));
         }
         // Knob positions of the pill toggles (animated).
-        auto Knobs(void) -> std::unordered_map<std::string, float>&
+        // Toggle knob animation, keyed by the toggle's ImGui id (not the bound bool's address: several
+        // toggles bind to temporaries or to one field reused across pages, and drove each other's knob).
+        struct Knob
         {
-            static std::unordered_map<std::string, float> knobs;
+            float k{0};
+            int frame{-2};
+        };
+        auto Knobs(void) -> std::unordered_map<ImGuiID, Knob>&
+        {
+            static std::unordered_map<ImGuiID, Knob> knobs;
             return knobs;
         }
     } // namespace
+
+    auto Nav(void) -> NavState&
+    {
+        static NavState n;
+        return n;
+    }
+    void NavFrame(bool on)
+    {
+        NavState& n = Nav();
+        n.on        = on;
+        n.lastCount = n.count;
+        n.count     = 0;
+        n.moved     = false;
+        if (!on || n.lastCount <= 0)
+            return;
+        if (pad::Pressed(pad::Down))
+            n.focus = (n.focus + 1) % n.lastCount, n.moved = true;
+        if (pad::Pressed(pad::Up))
+            n.focus = (n.focus + n.lastCount - 1) % n.lastCount, n.moved = true;
+        n.focus = std::clamp(n.focus, 0, n.lastCount - 1);
+    }
+    // Controller step for a slider: x1, x10 after holding left / right for a second.
+    static auto PadSteps(void) -> int
+    {
+        const float held = std::max(pad::HeldFor(pad::Left), pad::HeldFor(pad::Right));
+        const int dir    = (pad::Pressed(pad::Right) ? 1 : 0) - (pad::Pressed(pad::Left) ? 1 : 0);
+        return dir * (held > 1.0f ? 10 : 1);
+    }
 
     Grid::Grid(IGuiManager* gui, Context& ctx) : gui_{gui}, ctx_{ctx} {}
     Grid::~Grid(void) { Close(); }
@@ -112,13 +148,21 @@ namespace farplaneui::cfg
 
     // Starts a cell: a faint line above it (rows after the first), the label, and `controlW` px kept
     // free on the label's right for an inline control (toggle / button). Returns the label line's y.
-    void Grid::Card(const char* label, const char* desc, float controlW)
+    void Grid::Card(const char* label, const char* desc, float controlW, bool focusable)
     {
         (void)desc;
         Open();
         gui_->TableNextColumn();
         cardStart_ = gui_->GetCursorScreenPos();
         cardW_     = gui_->GetContentRegionAvail().x;
+        NavState& nav = Nav();
+        focused_      = false;
+        if (focusable && nav.on)
+        {
+            focused_ = nav.count++ == nav.focus;
+            if (focused_ && nav.moved)
+                gui_->SetScrollHereY(0.35f); // keep the focused card in view
+        }
         if (cell_ >= 2 && ctx_.white != nullptr)
             ui::ImageAt(gui_, ctx_.white, ImVec2(cardStart_.x, cardStart_.y - 5.0f), ImVec2(cardW_, 1), ImVec2(0, 0), ImVec2(1, 1), kRowLine);
         ++cell_;
@@ -142,6 +186,13 @@ namespace farplaneui::cfg
             gui_->PopTextWrapPos();
         }
         gui_->Dummy(ImVec2(cardW_, 2.0f));
+        if (focused_) // controller focus: an amber outline around the card
+        {
+            const float bottom = gui_->GetCursorScreenPos().y;
+            Round(gui_, ImVec2(cardStart_.x - 5.0f, cardStart_.y - 4.0f), ImVec2(cardW_ + 10.0f, bottom - cardStart_.y + 2.0f), Rgba{kEmber.r, kEmber.g, kEmber.b, 0.10f},
+                kAmber, 6.0f, 1.5f);
+            gui_->Dummy(ImVec2(0, 0)); // ImGui 1.92: an item must follow the cursor move Round() makes
+        }
     }
 
     auto Grid::Toggle(const char* label, const char* desc, bool& v) -> bool
@@ -155,9 +206,22 @@ namespace farplaneui::cfg
         bool changed = false;
         if (gui_->InvisibleButton("##pill", ImVec2(kPillW, kPillH)))
             v = !v, changed = true;
-        // Animated knob.
-        float& k = Knobs()[std::to_string(reinterpret_cast<uintptr_t>(&v))];
-        k += ((v ? 1.0f : 0.0f) - k) * std::min(1.0f, gui_->GetIO().DeltaTime * 18.0f);
+        if (focused_ && (pad::Pressed(pad::Confirm) || pad::Pressed(pad::Left) || pad::Pressed(pad::Right)))
+            v = !v, changed = true;
+        // Animated knob: a fixed 0.12 s slide that always lands exactly at the end; snaps to the value when
+        // the toggle wasn't drawn last frame (a page just opened), so it never slides on its own.
+        Knob& kn       = Knobs()[gui_->GetItemID()];
+        const int f    = gui_->GetFrameCount();
+        const float to = v ? 1.0f : 0.0f;
+        if (kn.frame != f - 1 && kn.frame != f)
+            kn.k = to;
+        else
+        {
+            const float stepK = std::min(1.0f, gui_->GetIO().DeltaTime / 0.12f);
+            kn.k = kn.k < to ? std::min(to, kn.k + stepK) : std::max(to, kn.k - stepK);
+        }
+        kn.frame      = f;
+        const float k = kn.k * kn.k * (3.0f - 2.0f * kn.k); // ease in/out
         Round(gui_, p, ImVec2(kPillW, kPillH), v ? kEmber : kTrack, v ? kAmber : kAmberDim, kPillH * 0.5f, 1.0f);
         const float kx = p.x + 3.0f + k * (kPillW - kPillH);
         Round(gui_, ImVec2(kx, p.y + 2.0f), ImVec2(kPillH - 4.0f, kPillH - 4.0f), v ? kIvory : kDim, Rgba{0, 0, 0, 0}, (kPillH - 4.0f) * 0.5f, 0.0f);
@@ -220,7 +284,13 @@ namespace farplaneui::cfg
     {
         Card(label, desc, 0.0f);
         gui_->SetCursorScreenPos(ImVec2(cardStart_.x, labelBottom_ + 2.0f));
-        const bool changed = Stepper<float>(gui_, v, min, max, StepFor(fmt), fmt, cardW_);
+        bool changed = Stepper<float>(gui_, v, min, max, StepFor(fmt), fmt, cardW_);
+        if (const int n = focused_ ? PadSteps() : 0; n != 0)
+        {
+            const float step = StepFor(fmt);
+            v       = std::clamp(min + std::round((v + n * step - min) / step) * step, min, max);
+            changed = true;
+        }
         EndCard(desc);
         return changed;
     }
@@ -228,7 +298,9 @@ namespace farplaneui::cfg
     {
         Card(label, desc, 0.0f);
         gui_->SetCursorScreenPos(ImVec2(cardStart_.x, labelBottom_ + 2.0f));
-        const bool changed = Stepper<int>(gui_, v, min, max, 1, fmt, cardW_);
+        bool changed = Stepper<int>(gui_, v, min, max, 1, fmt, cardW_);
+        if (const int n = focused_ ? PadSteps() : 0; n != 0)
+            v = std::clamp(v + n, min, max), changed = true;
         EndCard(desc);
         return changed;
     }
@@ -279,6 +351,10 @@ namespace farplaneui::cfg
             gui_->SameLine(0.0f, 6.0f);
             if (RoundButton(gui_, "##r", ">", h))
                 index = (index + 1) % count, changed = true;
+            if (focused_ && (pad::Pressed(pad::Right) || pad::Pressed(pad::Confirm)))
+                index = (index + 1) % count, changed = true;
+            if (focused_ && pad::Pressed(pad::Left))
+                index = (index + count - 1) % count, changed = true;
         }
         EndCard(desc);
         return changed;
@@ -296,7 +372,7 @@ namespace farplaneui::cfg
         gui_->PushStyleColor(ImGuiCol_ButtonActive, ToVec4(Rgba{kEmber.r, kEmber.g, kEmber.b, 0.66f}));
         gui_->PushStyleColor(ImGuiCol_Border, ToVec4(kAmber));
         gui_->PushStyleColor(ImGuiCol_Text, ToVec4(kAmber));
-        const bool clicked = gui_->Button(button, ImVec2(w, 0));
+        const bool clicked = gui_->Button(button, ImVec2(w, 0)) || (focused_ && pad::Pressed(pad::Confirm));
         gui_->PopStyleColor(5);
         gui_->PopStyleVar(2);
         gui_->SetCursorScreenPos(ImVec2(cardStart_.x, labelBottom_));
@@ -306,7 +382,7 @@ namespace farplaneui::cfg
 
     void Grid::Info(const char* label, const char* value)
     {
-        Card(label, nullptr, 0.0f);
+        Card(label, nullptr, 0.0f, false); // read-only: the controller skips it
         gui_->SetCursorScreenPos(ImVec2(cardStart_.x, labelBottom_));
         EndCard(value);
     }

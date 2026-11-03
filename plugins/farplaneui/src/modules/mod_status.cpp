@@ -3,8 +3,14 @@
  *
  * The player's status icons in game order, each with its time left underneath in the native style
  * ("5h", "15m", "42"). Read from memory through mod::PlayerBuffs; hovering an icon shows its name.
+ * Right-clicking a cancellable effect cancels it, the same request the statustimers addon sends
+ * (packet 0x0F1 with the status id; the game's own "cancel" for an effect).
+ * The game's own status icon cursor (keyboard F / controller, game menu "menu    buff", position 1..n at
+ * menu object +0x4C) is mirrored here: its icon is framed, and confirm (the controller's Confirm button or
+ * Enter) cancels it - the game's icons are hidden, and a hidden window doesn't take the game's confirm.
  */
 #include "common.hpp"
+#include "../pad.hpp"
 
 namespace farplaneui
 {
@@ -22,6 +28,21 @@ namespace farplaneui
             else
                 ::sprintf_s(b, "%d", t);
             return b;
+        }
+        // The game marks which effects the player may cancel (IStatusIcon::CanCancel; statustimers' check).
+        auto CanCancel(Context& ctx, uint16_t id) -> bool
+        {
+            if (id == 0 || id >= 0x400 || id == 255)
+                return false;
+            auto* rm = ctx.core->GetResourceManager();
+            const IStatusIcon* s = rm != nullptr ? rm->GetStatusIconByIndex(id) : nullptr;
+            return s != nullptr && s->CanCancel != 0;
+        }
+        void Cancel(Context& ctx, uint16_t id)
+        {
+            // 0x0F1 (8 bytes): header (id, size in 4-byte words, sync), then the status id at +4.
+            uint8_t p[8] = {0xF1, 0x04, 0, 0, static_cast<uint8_t>(id & 0xFF), static_cast<uint8_t>(id >> 8), 0, 0};
+            ctx.core->GetPacketManager()->AddOutgoingPacket(0xF1, sizeof(p), p);
         }
         auto Long(double s) -> std::string
         {
@@ -50,7 +71,7 @@ namespace farplaneui
         gui->SetNextWindowPos(ImVec2(x_, y_), ImGuiCond_Always);
         gui->SetNextWindowSize(ImVec2(cellW * static_cast<float>(std::min(count, perRow)) + 4.0f, cellH * static_cast<float>(rows) + 4.0f), ImGuiCond_Always);
         gui->SetNextWindowBgAlpha(0.0f);
-        const ImGuiWindowFlags f = ImGuiWindowFlags_NoDecoration | (locked_ ? ImGuiWindowFlags_NoInputs : 0) | ImGuiWindowFlags_NoSavedSettings |
+        const ImGuiWindowFlags f = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings |
                                    ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoBringToFrontOnFocus |
                                    ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoMove;
         if (gui->Begin("##fpui_status", nullptr, f))
@@ -71,6 +92,23 @@ namespace farplaneui
                     ui::ImageAt(gui, ctx.white, ImVec2(x_ - 2, y_ - 2), ImVec2(area.x + 4, area.y + 4), ImVec2(0, 0), ImVec2(1, 1), art::gold_hi, 0.18f);
             }
             const ImVec2 mouse = gui->GetIO().MousePos;
+            // The game's status icon cursor: which of our icons it is on, and confirm = cancel it.
+            int cursor = -1;
+            if (mod::TopMenuName() == "menu    buff")
+            {
+                const uintptr_t obj = mod::TopMenuObject();
+                cursor = obj != 0 ? static_cast<int>(Ashita::Memory::SafeRead<uint32_t>(obj + 0x4C, 0u)) - 1 : -1;
+                if (obj != 0 && cursor != lastCursor_) // /fpui status align: the game's window rect per cursor move, to a file
+                    LogAlign(ctx, obj, cursor, count);
+                lastCursor_ = cursor;
+                const bool enter = (::GetAsyncKeyState(VK_RETURN) & 0x8000) != 0;
+                const bool confirm = pad::Pressed(pad::Confirm) || (enter && !enterDown_);
+                enterDown_ = enter;
+                if (confirm && cursor >= 0 && cursor < count && CanCancel(ctx, buffs[static_cast<size_t>(cursor)].id))
+                    Cancel(ctx, buffs[static_cast<size_t>(cursor)].id);
+            }
+            else
+                enterDown_ = (::GetAsyncKeyState(VK_RETURN) & 0x8000) != 0, lastCursor_ = -2;
             gui->PushFont(nullptr, textSize);
             for (int i = 0; i < count; ++i)
             {
@@ -93,16 +131,39 @@ namespace farplaneui
                 }
                 if (mouse.x >= x && mouse.y >= y && mouse.x < x + size && mouse.y < y + size)
                 {
+                    const bool cancel = CanCancel(ctx, b.id);
+                    const char* hint  = cancel ? "\n(right click to cancel)" : "";
                     if (b.seconds > 0)
-                        gui->SetTooltip("%s  (%s)", mod::BuffName(ctx, b.id).c_str(), Long(b.seconds).c_str());
+                        gui->SetTooltip("%s  (%s)%s", mod::BuffName(ctx, b.id).c_str(), Long(b.seconds).c_str(), hint);
                     else
-                        gui->SetTooltip("%s", mod::BuffName(ctx, b.id).c_str());
+                        gui->SetTooltip("%s%s", mod::BuffName(ctx, b.id).c_str(), hint);
+                    if (cancel && gui->IsMouseClicked(ImGuiMouseButton_Right))
+                        Cancel(ctx, b.id);
                 }
             }
             gui->PopFont();
         }
         gui->Dummy(ImVec2(0, 0)); // ImGui 1.92: an item must follow any SetCursorScreenPos before End
         gui->End();
+    }
+
+    // The game's (hidden) status window and cursor, next to our own layout: lines our icons up with the game's
+    // selector. int16 words of the menu object around its rect (+0x42 x1, +0x44 y1, +0x46 x2, +0x48 y2).
+    void StatusModule::LogAlign(Context& ctx, uintptr_t obj, int cursor, int count) const
+    {
+        if (alignLog_.empty())
+            return;
+        FILE* f = nullptr;
+        if (::fopen_s(&f, alignLog_.c_str(), "ab") != 0 || f == nullptr)
+            return;
+        ::fprintf(f, "%llu  cursor %d of %d icons; ours at %.0f,%.0f size %.0f gap 3 perRow %d; screen %.0fx%.0f\r\n",
+            static_cast<unsigned long long>(::GetTickCount64()), cursor + 1, count, static_cast<double>(x_), static_cast<double>(y_),
+            static_cast<double>(iconSize_), perRow_, static_cast<double>(ctx.layout.screenW), static_cast<double>(ctx.layout.screenH));
+        ::fprintf(f, "    obj int16 +0x38..+0x5E:");
+        for (uintptr_t o = 0x38; o < 0x60; o += 2)
+            ::fprintf(f, " %d", static_cast<int>(Ashita::Memory::SafeRead<int16_t>(obj + o, static_cast<int16_t>(0))));
+        ::fprintf(f, "\r\n");
+        ::fclose(f);
     }
 
     void StatusModule::Load(IConfigurationManager* cfg, const char* alias)
@@ -139,6 +200,23 @@ namespace farplaneui
             x_ = std::max(0.0f, static_cast<float>(std::atof(args[1].c_str())));
             y_ = std::max(0.0f, static_cast<float>(std::atof(args[2].c_str())));
             ctx.MarkDirty();
+            return true;
+        }
+        if (sub == "align")
+        {
+            if (alignLog_.empty())
+            {
+                const std::string dir = std::string(ctx.core->GetInstallPath()) + "\\logs";
+                ::CreateDirectoryA(dir.c_str(), nullptr);
+                alignLog_ = dir + "\\farplaneui_status.log";
+                ::DeleteFileA(alignLog_.c_str());
+                ctx.Print("Status: logging the game's status window to " + alignLog_ + " while its cursor moves. /fpui status align again to stop.");
+            }
+            else
+            {
+                ctx.Print("Status: align log off. Log: " + alignLog_);
+                alignLog_.clear();
+            }
             return true;
         }
         if (sub == "lock" || sub == "unlock")

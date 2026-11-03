@@ -153,7 +153,7 @@ namespace farplaneui
         {
             if (pulseActor_ != actor || NowS() - pulseStart_ > kPulseDur)
                 pulseLabel_.clear();
-            pulseStart_ = NowS(), pulseActor_ = actor;
+            pulseStart_ = NowS(), pulseActor_ = actor, pulseKind_ = cat == 7 ? 1 : 2;
         }
         else if ((cat == 11 || cat == 4) && pulseActor_ == actor)
             pulseStart_ = -100;
@@ -188,7 +188,7 @@ namespace farplaneui
                 if (const size_t end = what.find_first_of(".!"); end != std::string::npos)
                     what.resize(end);
                 pulseLabel_ = what;
-                pulseStart_ = NowS(), pulseActor_ = ent->GetServerId(idx);
+                pulseStart_ = NowS(), pulseActor_ = ent->GetServerId(idx), pulseKind_ = verb[1] == 'r' ? 1 : 2;
             }
         return false;
     }
@@ -205,6 +205,7 @@ namespace farplaneui
         axisMode_     = std::clamp(cfg->GetInt32(alias, S, "axis", axisMode_), 0, 5);
         style_        = std::clamp(cfg->GetInt32(alias, S, "style", style_), 0, 2);
         info_         = cfg->GetBool(alias, S, "info", info_);
+        warnColors_   = cfg->GetBool(alias, S, "warnColors", warnColors_);
     }
     void TargetModule::Save(IConfigurationManager* cfg, const char* alias) const
     {
@@ -218,6 +219,7 @@ namespace farplaneui
         ui::SetI(cfg, alias, S, "axis", axisMode_);
         ui::SetI(cfg, alias, S, "style", style_);
         ui::SetB(cfg, alias, S, "info", info_);
+        ui::SetB(cfg, alias, S, "warnColors", warnColors_);
     }
     auto TargetModule::Command(Context& ctx, const std::vector<std::string>& args) -> bool
     {
@@ -251,7 +253,9 @@ namespace farplaneui
         }
         else if (sub == "pulse")
         {
-            pulseStart_ = NowS(), pulseLabel_ = "Bomb Toss", pulseActor_ = 0;
+            // /fpui target pulse [cast]: test the pulse and warning colour (TP move, or a spell with "cast").
+            const bool cast = args.size() > 1 && ui::Lower(args[1]) == "cast";
+            pulseStart_ = NowS(), pulseLabel_ = cast ? "Fire II" : "Bomb Toss", pulseActor_ = 0, pulseKind_ = cast ? 2 : 1;
             return true;
         }
         else if (sub == "size" && args.size() > 1 && ui::ParseFloat(args[1], f))
@@ -329,8 +333,9 @@ namespace farplaneui
         static const char* const kStyles[] = {"Hairline", "HP arc", "Classic band"};
         ch |= g.Toggle("Ring info", "Name, level and detection above the ring; HP, resists / weaknesses and distance below it (mobdb data).", info_);
         ch |= g.Choice("Ring style", "Hairline: thin glowing ring with an HP pill under it. HP arc: the ring itself shows HP. Classic: the original wide band.", style_, kStyles, 3);
+        ch |= g.Toggle("Warning colours", "The ring turns red-orange while the target readies a TP move and violet while it casts a spell.", warnColors_);
         ch |= g.Toggle("HP bar", "Slim HP bar with the percentage under the target.", bar_);
-        ch |= g.Toggle("Show on objects", "Also ring / bar doors, counters, home points and other fixed objects (target bar too).", mod::ShowObjects());
+        ch |= g.Toggle("Show on objects", "Also put the ring and the full target bar on doors, counters, home points, guide stones and other objects. Off: the game's own target cursor marks them and the target bar shows just the name.", mod::ShowObjects());
         ch |= g.Toggle("Scale with model size", "Size the ring from the target's model size when known.", useModelSize_);
         ch |= g.Slider("Ring scale", "Multiplier on the ring radius.", ringScale_, 0.2f, 5.0f, "%.2f");
         ch |= g.Slider("Axis mode", "World axis mapping (0 is correct for PhoenixXI).", axisMode_, 0, 5);
@@ -627,6 +632,13 @@ namespace farplaneui
                 r.yaw        = yaw;
                 r.style      = style_;
                 r.color      = style_ == 2 ? Rgba{0.97f, 0.94f, 0.74f, 1.0f} : claim;
+                // Readying a TP move: red-orange; casting: violet. Eased in over 0.15 s, out over the last 0.3 s.
+                if (warnColors_ && pulsing && pulseKind_ != 0)
+                {
+                    const Rgba warn = pulseKind_ == 1 ? Rgba{1.0f, 0.36f, 0.21f, 1.0f} : Rgba{0.66f, 0.49f, 1.0f, 1.0f};
+                    const float k   = std::min({1.0f, pulseAge / 0.15f, (kPulseDur - pulseAge) / 0.3f});
+                    r.color         = Rgba{r.color.r + (warn.r - r.color.r) * k, r.color.g + (warn.g - r.color.g) * k, r.color.b + (warn.b - r.color.b) * k, 1.0f};
+                }
                 r.alpha      = claimAlpha * rangeA;
                 r.pxWorld    = pxWorld * scaleRes;
                 r.rearIn     = rearIn;

@@ -303,8 +303,37 @@ namespace farplaneui
         // 3. legacy per-zone PNG with ini calibration (handled in Render)
     }
 
+    namespace { MinimapModule* g_minimap = nullptr; }
+
+    void MinimapModule::Initialize(Context& ctx)
+    {
+        core_     = ctx.core;
+        g_minimap = this;
+        if (auto* im = core_ != nullptr ? core_->GetInputManager() : nullptr; im != nullptr && im->GetMouse() != nullptr)
+            im->GetMouse()->AddCallback("farplaneui_minimap", &MinimapModule::MouseCallback);
+    }
+    // Ctrl + wheel over the map: counted for Render and kept from the game (TRUE blocks it).
+    auto __stdcall MinimapModule::MouseCallback(uint32_t msg, WPARAM w, LPARAM l, bool blocked) -> BOOL
+    {
+        (void)l, (void)blocked;
+        MinimapModule* m = g_minimap;
+        if (m == nullptr || msg != WM_MOUSEWHEEL || !m->show_ || !m->mapRect_.valid() || (::GetAsyncKeyState(VK_CONTROL) & 0x8000) == 0)
+            return FALSE;
+        auto* gui = m->core_ != nullptr ? m->core_->GetGuiManager() : nullptr;
+        if (gui == nullptr)
+            return FALSE;
+        const ImVec2 p = gui->GetIO().MousePos;
+        const Rect& r  = m->mapRect_;
+        if (p.x < r.x || p.y < r.y || p.x >= r.x + r.w || p.y >= r.y + r.h)
+            return FALSE;
+        m->wheel_ += static_cast<float>(GET_WHEEL_DELTA_WPARAM(w)) / static_cast<float>(WHEEL_DELTA);
+        return TRUE;
+    }
     void MinimapModule::Release(void)
     {
+        if (auto* im = core_ != nullptr ? core_->GetInputManager() : nullptr; im != nullptr && im->GetMouse() != nullptr)
+            im->GetMouse()->RemoveCallback("farplaneui_minimap");
+        g_minimap = nullptr;
         FreeMap();
         if (arrowTex_ != nullptr)
             arrowTex_->Release();
@@ -424,7 +453,40 @@ namespace farplaneui
                 static_cast<unsigned>(table_), static_cast<unsigned>(floorFn_), static_cast<unsigned>(floorThis_), curZone_, curFloor_, hasEntry_ ? 1 : 0,
                 entry_.floorId, entry_.floorIndex, entry_.flags, entry_.scale, entry_.datOffset, entry_.offsetX, entry_.offsetY, texW_, texH_,
                 source_.empty() ? "none" : source_.c_str(), status_.c_str());
-            ctx.Print(b);
+            // Everything for the zone to <Ashita>\logs\farplaneui_minimap.log: every map page of the zone and where
+            // the player falls on each (texel position vs the page size), to pick / redirect the right page.
+            const std::string dir = std::string(ctx.core->GetInstallPath()) + "\\logs";
+            ::CreateDirectoryA(dir.c_str(), nullptr);
+            const std::string file = dir + "\\farplaneui_minimap.log";
+            FILE* log = nullptr;
+            if (::fopen_s(&log, file.c_str(), "wb") == 0 && log != nullptr)
+            {
+                auto* mm  = ctx.core->GetMemoryManager();
+                auto* pty = mm->GetParty();
+                auto* ent = mm->GetEntity();
+                const uint32_t me = pty->GetMemberTargetIndex(0);
+                const float x = ent->GetLocalPositionX(me), y = ent->GetLocalPositionY(me), z = ent->GetLocalPositionZ(me);
+                ::fprintf(log, "%s\r\n", b);
+                ::fprintf(log, "player x %.2f y %.2f z %.2f, game floor now %d\r\n", static_cast<double>(x), static_cast<double>(y), static_cast<double>(z),
+                    CurrentFloor(x, y, z));
+                MapEntry e{};
+                for (uint32_t i = 0; i < kMaxEntries && ReadEntry(i, e); ++i)
+                {
+                    if (e.zone != curZone_)
+                        continue;
+                    const float s  = static_cast<float>(std::abs(e.scale)) / 5.0f;
+                    const float tx = x * s - static_cast<float>(e.offsetX), ty = -y * s - static_cast<float>(e.offsetY); // texels on a 512 page
+                    const uint32_t lo = e.flags & 0x0Fu;
+                    const uint32_t id = lo == 0 ? 5312u + e.datOffset : lo == 1 ? 53295u + e.datOffset : lo == 2 ? 54295u + e.datOffset : 5522u;
+                    char path[MAX_PATH]{};
+                    ctx.core->GetResourceManager()->GetFilePath(id, path, sizeof(path));
+                    ::fprintf(log, "  entry %u: floorId %u index %u flags 0x%02X scale %d datOff %u off %d,%d -> DAT %u (%s); player at %.0f,%.0f of 512%s\r\n", i,
+                        e.floorId, e.floorIndex, e.flags, e.scale, e.datOffset, e.offsetX, e.offsetY, id, path[0] != '\0' ? path : "no path",
+                        static_cast<double>(tx), static_cast<double>(ty), (tx >= 0 && ty >= 0 && tx < 512 && ty < 512) ? "  <- on this page" : "");
+                }
+                ::fclose(log);
+                ctx.Print("Minimap: details written to " + file);
+            }
             return true;
         }
         ctx.Print("/fpui minimap [show|hide|dock|undock|lock|unlock] | zoom <0.25-8> | enemies [on|off] | reload | debug");
@@ -434,7 +496,7 @@ namespace farplaneui
     {
         cfg::Grid g(gui, ctx);
         mod::DockSettings(g, ctx, show_, docked_, locked_);
-        bool ch = g.Slider("Zoom", "Map magnification.", zoom_, 0.25f, 8.0f, "%.2f");
+        bool ch = g.Slider("Zoom", "Map magnification. Tip: hold Ctrl and scroll the mouse wheel over the minimap to zoom in and out.", zoom_, 0.25f, 8.0f, "%.2f");
         ch |= g.Toggle("Show enemies", "Nearby monsters as red dots; your target in gold.", enemies_);
         if (ch)
             ctx.MarkDirty();
@@ -446,6 +508,7 @@ namespace farplaneui
     {
         if (!show_)
             return;
+        mapRect_ = Rect{}; // set again below while the map is drawn
         auto* mm    = ctx.core->GetMemoryManager();
         auto* party = mm != nullptr ? mm->GetParty() : nullptr;
         auto* ent   = mm != nullptr ? mm->GetEntity() : nullptr;
@@ -469,7 +532,7 @@ namespace farplaneui
         }
 
         // No panel border: the ornate minimap frame is the only frame.
-        auto p = mod::BeginPanel(ctx, gui, "##fpui_minimap", nullptr, docked_, ctx.layout.minimap, user_, locked_, 0.0f, false, 0, false);
+        auto p = mod::BeginPanel(ctx, gui, "##fpui_minimap", nullptr, docked_, ctx.layout.minimap, user_, locked_, 0.0f, false, ImGuiWindowFlags_NoScrollWithMouse, false);
         if (p.open)
         {
             // Edge to edge (no panel padding) so the frame's top and bottom line up with the chat box.
@@ -597,6 +660,23 @@ namespace farplaneui
             gui->Dummy(ImVec2(side, side));
             if (map == nullptr && gui->IsItemHovered())
                 gui->SetTooltip("No map for zone %u: %s. /fpui minimap debug for details.", zone, status_.empty() ? "unknown" : status_.c_str());
+            // Ctrl + mouse wheel zooms (15% a notch; notches come from MouseCallback). Resting the mouse on
+            // the map for a moment shows the hint. Both use the map's own rectangle, not ImGui's hover state,
+            // so a window overlapping the map doesn't stop them.
+            mapRect_ = Rect{origin.x, origin.y, side, side};
+            if (wheel_ != 0.0f)
+            {
+                zoom_  = std::clamp(zoom_ * std::pow(1.15f, wheel_), 0.25f, 8.0f);
+                wheel_ = 0.0f;
+                ctx.MarkDirty();
+            }
+            const ImVec2 mp = gui->GetIO().MousePos;
+            const bool over = mp.x >= origin.x && mp.y >= origin.y && mp.x < origin.x + side && mp.y < origin.y + side;
+            const double nowS = static_cast<double>(::GetTickCount64()) / 1000.0;
+            if (!over || std::abs(mp.x - hoverPos_.x) > 3.0f || std::abs(mp.y - hoverPos_.y) > 3.0f)
+                hoverAt_ = nowS, hoverPos_ = over ? mp : ImVec2(-1, -1);
+            if (over && map != nullptr && nowS - hoverAt_ > 0.6)
+                gui->SetTooltip("Ctrl + mouse wheel to zoom (%.2fx)", static_cast<double>(zoom_));
         }
         mod::EndPanel(p, &user_, docked_, ctx);
     }

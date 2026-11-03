@@ -5,9 +5,9 @@
 
 | Version | Status | Submitted | Reviewed by | Notes |
 |---|---|---|---|---|
-| 0.11.2 | Pending review | 2026-11-03 |  | Ashita v4 plugin (C++ DLL), source included. Sends no packets. Hides and replaces parts of the game UI. Replaces 0.11.0 and 0.11.1 (submitted the same day, not yet reviewed): adds Ctrl+R reply in its chat line and an optional Utsusemi shadow display. |
+| 0.11.3 | Pending review | 2026-11-03 |  | Ashita v4 plugin (C++ DLL), source included. Hides and replaces parts of the game UI. One outgoing packet: 0x0F1 (cancel a status effect), only when the player asks for it. Replaces 0.11.0 - 0.11.2 (not yet reviewed). |
 
-**Author:** Spongeh, building on the work of the XIUI creators (special thanks to Shuu for the idea of packaging many UI elements into a single load). **Program:** Ashita v4 plugin (C++). **Type:** UI replacement. It reads data the client already has or receives, draws its own interface, and hides the game's own versions of the parts it replaces. It sends no packets. Only active while the Farplane linkshell is equipped.
+**Author:** Spongeh, building on the work of the XIUI creators (special thanks to Shuu for the idea of packaging many UI elements into a single load). **Program:** Ashita v4 plugin (C++). **Type:** UI replacement. It reads data the client already has or receives, draws its own interface, and hides the game's own versions of the parts it replaces. The only packet it sends is the game's own "cancel this status effect" request, when the player right-clicks an effect or confirms it in the game's status icon cursor. Only active while the Farplane linkshell is equipped.
 <!-- /staff-approval -->
 
 ---
@@ -24,12 +24,17 @@ dock:
   member's buffs, and equipment with gil.
 - **Target:** a target bar with the mob's level, detection and weaknesses, plus a mob info window
   with drops (with rates), steal, respawn and NM placeholders.
-- **Target ring:** drawn in the 3D scene with the name, detection and resists.
-- **Timers:** recast timers in the tTimers look, and status icons with their time left.
-- **Utsusemi:** your shadow count shown around your character, in the style you pick (wisps,
-  diamond, rune ring, smoke, pips or off).
-- **Other panels:** cast bar, rest tick timer, XP / points, and a quest tracker that slides in from
-  the right edge.
+- **Target ring:** drawn in the 3D scene with the name, detection and resists. It turns red-orange
+  while your target readies a TP move and violet while it casts.
+- **Timers:** recast timers in the tTimers look, and status icons with their time left. Right-click
+  an icon to cancel that effect.
+- **Utsusemi and Blink:** your shadow count shown around your character, in the style you pick
+  (wisps, diamond, rune ring, smoke, pips or off), and Blink as a shimmer of motes.
+- **Cast ring:** your cast progress as a ring around your feet (or the classic bar).
+- **Controller:** the touchpad opens the settings and the D-pad drives them; the game's status icon
+  cursor cancels effects with confirm.
+- **Other panels:** rest tick timer, XP / points, and a quest tracker that slides in from the right
+  edge.
 
 While FarplaneUI is loaded it hides the game's own versions of those (party list, target frame,
 compass, clock, chat log window, status icons and cast bar). Everything is restored when it unloads.
@@ -79,8 +84,10 @@ gen_mobdb.exe <mobdb addon folder> resources/farplaneui/mobdb
 
 ## Commands
 
-`/fpui` opens the settings window. Ctrl+R replies to your last tell. `/fpui shadows style <name>`
-picks the Utsusemi display (`none` turns it off). `/fpui native` lists what it hides in the game's UI and
+`/fpui` opens the settings window (or the controller's touchpad). Ctrl+R replies to your last tell.
+Ctrl + mouse wheel over the minimap zooms it. `/fpui shadows style <name>` picks the Utsusemi display
+(`none` turns it off), `/fpui castbar style ring|bar|both` the cast display, and
+`/fpui pad bind <action>` sets a controller button. `/fpui native` lists what it hides in the game's UI and
 `/fpui native all off` stops all of that hiding. See the settings window for everything else.
 
 ## Credits
@@ -103,8 +110,7 @@ This is a plugin, so the source is included next to the DLL (`src/`, built with 
 `plugins/FarplaneUI.dll` is the release build of exactly this source (MSVC 2022, x86 Release).
 
 ### Changes since 0.11.0
-0.11.0 and 0.11.1 were submitted earlier the same day and haven't been reviewed; 0.11.2 replaces
-them. Two additions, both display / input only:
+0.11.0 - 0.11.2 were submitted earlier the same day and haven't been reviewed; 0.11.3 replaces them.
 - **0.11.1, Ctrl+R reply** (`src/modules/mod_chat.cpp`, declarations in `src/modules.hpp`): Ctrl+R
   (the game's "reply to last tell") opens FarplaneUI's own chat line prefilled with
   `/t <name of the last player who sent you a tell> ` instead of the game's input bar. The player
@@ -115,6 +121,28 @@ them. Two additions, both display / input only:
   none). The count is read from your own buff list (Copy Image status ids 66 / 444 / 445 / 446), the
   same buffs the status icons show. It is drawn in the same 3D pass as the target ring, through the
   existing `SetRenderTarget` hook; no new hook, packet or memory write.
+- **0.11.3:**
+  - **Cancel a status effect (the one outgoing packet).** Right-clicking one of FarplaneUI's
+    status icons, or pressing confirm (Enter / the controller's confirm button) while the game's own
+    status icon cursor is on it, sends packet **0x0F1** with that status id: the game's own "cancel
+    this effect" request, byte for byte what the statustimers addon sends. Only for effects the game
+    marks as cancellable (`IStatusIcon::CanCancel`), and only on that click / press
+    (`src/modules/mod_status.cpp`). The game's cursor position is read from its "menu    buff" menu
+    object (+0x4C).
+  - **Controller navigation of FarplaneUI's settings** (new `src/modules/mod_pad.cpp`, `src/pad.hpp`,
+    `src/cfgui.cpp`): read through Ashita's DirectInput controller callback. While FarplaneUI's
+    settings window is open from the controller, that callback returns TRUE for the D-pad, the
+    buttons and the left stick, so the game doesn't also act on them; released as soon as the window
+    closes. `/fpui pad game on|off` (typed by the player) calls Ashita's
+    `IInputManager::SetDisableGamepad`.
+  - **Display only:** Blink shimmer and a front / behind split for the shadow effects (the front part
+    is drawn as screen-space triangles when the scene is finished: `src/worldring.cpp` `DrawFront`,
+    called from the mask's existing under-UI draw), a cast ring around the player's feet, warning
+    colours on the target ring while the target readies a move or casts, Ctrl + mouse wheel zoom on
+    the minimap (Ashita's mouse callback; TRUE only for that wheel event over the map), the ready
+    check also reading party lines another addon blocked (read only), notifications closing when
+    answered, inventory counts, objects named on the target bar, and the game's target frame left
+    visible for objects and during events.
 
 ### What it reads
 **Incoming packets.** It only listens: packets are never changed, blocked or injected.
@@ -163,7 +191,10 @@ from Ashita's resource manager. Monster and quest data are built in (see the REA
   tell lines, chat mode 12). While Ctrl+R opens FarplaneUI's line, R is removed from what the game
   reads through DirectInput so the game's own reply bar doesn't open too. Other Ctrl / Alt chords
   (macro palettes) are untouched.
-- **Mouse:** only over FarplaneUI's own windows.
+- **Mouse:** only over FarplaneUI's own windows. Ctrl + mouse wheel over the minimap zooms it (that
+  wheel event is kept from the game).
+- **Controller:** see "Changes since 0.11.0" (0.11.3). Buttons, D-pad and left stick are held from
+  the game only while FarplaneUI's settings window is being driven by the controller.
 
 ### Commands it sends (`QueueCommand`)
 Only these, and all but the clock are a direct result of the player typing or clicking:
@@ -173,8 +204,12 @@ Only these, and all but the clock are a direct result of the player typing or cl
 - `/p ...` when the player starts or answers a ready check (`/readycheck`), and `/p|/l|/l2 ...`
   when the player runs `/fpui dps report`.
 
+### Outgoing packets
+Exactly one, and only on a player's click / press: **0x0F1** (8 bytes, status id at +4), the game's
+own request to cancel one of the player's own status effects (see 0.11.3 above). No other
+`AddOutgoingPacket`, no packet injection, no packet modification.
+
 ### What it does NOT do
-- **No outgoing packets.** No `AddOutgoingPacket`, no packet injection, no packet modification.
 - **No automation.** No actions, abilities, spells, trades or targeting on its own; nothing runs on
   a timer that acts in game.
 - **No network access.** No sockets, HTTP or external programs (the Settings > Performance page can
@@ -185,7 +220,8 @@ Only these, and all but the clock are a direct result of the player typing or cl
 
 ### Files it writes
 `<Ashita>/config/farplaneui/farplaneui.ini` (settings), `quests_<character>.txt` (quest progress),
-and, only on request, `<Ashita>/logs/farplaneui_perf_*.log` / `farplaneui_enter.log` (diagnostics).
+and, only on request, diagnostics in `<Ashita>/logs/`: `farplaneui_perf_*.log`, `farplaneui_enter.log`,
+`farplaneui_pad.log`, `farplaneui_minimap.log`, `farplaneui_target.log`.
 
 ### Information shown
 Everything comes from what the client already has or from public server data: the minimap and
@@ -195,22 +231,24 @@ repository (the same data as the mobdb 2.x addon).
 
 ### Files in the reviewed version
 
-`SHA256SUMS` lists the SHA-256 of every file in this version (1552 files).
-Its own SHA-256 is `fa591ce77b44ccbddccc1c1ea1812c70bca8b75b95eccda74245d1b33595dd5b`.
+`SHA256SUMS` lists the SHA-256 of every file in this version (1554 files).
+Its own SHA-256 is `3ff33aa71b90c24950b61c5731807f79d57bf41f65aa45f1c55405e31143aa2c`.
 
 Main files:
 
 | File | SHA-256 |
 |---|---|
-| `plugins/FarplaneUI.dll` | `15dbbcf6b76f987d6e117d41b70a990d97fbbfbc47b969788a03c81aa6d32d52` |
-| `CMakeLists.txt` | `9151e08975a7cbb304a6ac71448da3ab723900325ac8d941376c5b8b388d5fe7` |
-| `src/farplaneui.cpp` | `ab4bc6fd6a4b09419b0563344e568f6a1c6bb654254a32556b980c921af79695` |
-| `src/modules/mod_native.cpp` | `dfe638db6249d23c5e58e3ad5ec4975ea7aa3e5008f2d9b0531be46142ae1ad1` |
+| `plugins/FarplaneUI.dll` | `24f3171555fd7517b6ea88cd8d2444b692f1d7c501101105423b93b91e04722d` |
+| `CMakeLists.txt` | `a0a4620605c586244f2e5be89b95e14a017f1fedabdd2a8e7d6bc7bb63784111` |
+| `src/farplaneui.cpp` | `405856eff04e18bd0c3bd4de09dcc281b04837dd5cd74b0618afe06739a5c3ba` |
+| `src/modules/mod_native.cpp` | `13e66032a47fd99c9f22574d643c4cf706050ed226c83dd66aef8cf9ba90d40a` |
 | `src/modules/mod_cmdmenu.cpp` | `0ed691f082947acb37411fdd3bfb30be4057cc314a1ea3491fb6f61502a151d2` |
 | `src/modules/mod_chat.cpp` | `4870c48072a928b8176bb117fa9e93aa2c1202b12a27120239e1d4ceff9c911a` |
-| `src/modules/mod_shadows.cpp` | `e80623138b333c20b780f90dac64d460676370cd84d595de14407ade59438f72` |
-| `src/worldring.cpp` | `a92b230b3d7f8f0e07c953f998ba70569f2ad9d9448aeb5014d6dcfbc42b5237` |
-| `src/mask.cpp` | `44b67265b40975375ed5ca72a31cc2c984dfad67a8b15ee6dfe747191093c580` |
+| `src/modules/mod_shadows.cpp` | `96d715022a01e000ea7f9fda6092c02ce198e766fa25cc64acff44861bb4f1f8` |
+| `src/modules/mod_status.cpp` | `a20821b50cb9ead83176bd44b3bc2ae50603592cde11278cba050e2c3adda551` |
+| `src/modules/mod_pad.cpp` | `284da337d28488ff731d96cdab02630a8e72a74227620ed7e33b4d96169abd76` |
+| `src/worldring.cpp` | `98849cf5e2dcae37436fb119a081ddebf0ffb4be1a1a8788058048fe6db41ed8` |
+| `src/mask.cpp` | `701736185c23e8678e2a8cc1211ad92f2c905d5efd7d2adeab30a2a7e20293c1` |
 | `src/data/quest_db.hpp` | `52a76bb70ef80a9365f43fc24523e06cb465b6fd39090ce11650077120ee3c7b` |
 | `tools/gen_mobdb.cpp` | `c4044f0591cf9756ac48c22a5ceec509d599d6af3a3d18de757b239bb7932eab` |
 | `tools/gen_quest_db.cpp` | `1471f2642a37fcfa5226cbc7dbfaa9098aef0a1689cd3512310534fd622687eb` |

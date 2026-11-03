@@ -93,6 +93,10 @@ namespace farplaneui
         bool setup_{false};
         MaskStats stats_{};
         std::vector<SpriteQuad> overlay_; // set by the host each frame (Ember dock)
+        // Called once per frame when the 3D scene is finished, just before the mask draws (the shadow
+        // effects' front batch, worldring.cpp DrawFront).
+        void (*beforeDraw_)(void* user){nullptr};
+        void* beforeDrawUser_{nullptr};
         std::string assetDir_;
         // Band background image (artkit\mask_*.png), loaded when the chosen file changes.
         IDirect3DTexture8* image_{nullptr};

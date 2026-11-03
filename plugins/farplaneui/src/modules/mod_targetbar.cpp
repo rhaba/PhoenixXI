@@ -218,8 +218,9 @@ namespace farplaneui
         uint32_t idx = tgt->GetTargetIndex(tgt->GetIsSubTargetActive() != 0 ? 1u : 0u);
         if (idx >= 2304 || (idx != 0 && ent->GetRawEntity(idx) == nullptr))
             idx = 0;
-        if (idx != 0 && !mod::ShowObjects() && mod::IsObject(ent, idx))
-            idx = 0; // doors, counters, home points... (Target > Show on objects)
+        // Doors, counters, home points, guide stones...: just the name here (Target > Show on objects shows the full
+        // bar); the game's own target cursor marks them and there is no ring.
+        const bool object = idx != 0 && !mod::ShowObjects() && mod::IsObject(ent, idx);
         // Baked into the strip, the panel stays up with no target so the strip doesn't jump.
         if (idx == 0 && !docked_)
             return;
@@ -241,11 +242,17 @@ namespace farplaneui
                 gui->TextDisabled("No target");
                 mod::StripBar(ctx, gui, 0.0f, art::amber);
             }
+            else if (object)
+            {
+                const char* nm = ent->GetName(idx);
+                gui->TextColored(ToVec4(art::gold_hi), "%s", nm != nullptr && nm[0] != '\0' ? nm : "Object");
+                mod::StripBar(ctx, gui, 0.0f, art::amber);
+            }
             else
                 RenderTarget(ctx, gui, idx);
         }
         mod::EndPanel(p, &user_, docked_, ctx);
-        if (infoOpen_ && idx != 0)
+        if (infoOpen_ && idx != 0 && !object)
             RenderInfo(ctx, gui);
     }
 

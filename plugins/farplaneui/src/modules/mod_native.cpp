@@ -171,7 +171,10 @@ namespace farplaneui
         const bool showCompass = restoreAll || !hideCompass_;
         // Doors, counters and other fixed objects get no FarplaneUI ring / target info, so the game's own
         // target frame and cursor stay for them (unless "Show on objects" is on in Target).
-        const bool showTarget  = restoreAll || !hideTarget_ || targetIsObject_;
+        // Also with no target and during an event (status 4: a door's dialog, cutscenes): the game reports no target
+        // (or another one) while its menu is up, and hiding then took the door's triangle away a second in. With
+        // nothing targeted the game draws no frame anyway, so only FarplaneUI's own targets hide the game's.
+        const bool showTarget  = restoreAll || !hideTarget_ || targetIsObject_ || noTarget_ || status_ == 4;
         SetVisible(compass_, showCompass ? 1 : 0);
         PatchByte(compassByte_, showCompass ? 1 : 0);
         SetVisible(buffs_, (restoreAll || !hideBuffs_) ? 1 : 0);
@@ -273,6 +276,27 @@ namespace farplaneui
             const uint32_t ti = tgt != nullptr ? tgt->GetTargetIndex(tgt->GetIsSubTargetActive() != 0 ? 1u : 0u) : 0;
             noTarget_       = ti == 0;
             targetIsObject_ = ti != 0 && ent != nullptr && ent->GetRawEntity(ti) != nullptr && !mod::ShowObjects() && mod::IsObject(ent, ti);
+            // /fpui native targetlog: one line per change of what decides the game's target frame / cursor.
+            if (!targetLog_.empty() && tgt != nullptr && ent != nullptr)
+            {
+                const uint32_t t0 = tgt->GetTargetIndex(0), t1 = tgt->GetTargetIndex(1);
+                const bool raw    = ti != 0 && ti < 2304 && ent->GetRawEntity(ti) != nullptr;
+                char b[320]{};
+                ::sprintf_s(b, "slot0 %u slot1 %u sub %d -> idx %u \"%s\" type %u spawn 0x%X render 0x%X | object %d status %u -> game target frame %s", t0, t1,
+                    tgt->GetIsSubTargetActive() != 0 ? 1 : 0, ti, raw && ent->GetName(ti) != nullptr ? ent->GetName(ti) : "", raw ? static_cast<unsigned>(ent->GetType(ti)) : 0u,
+                    raw ? static_cast<unsigned>(ent->GetSpawnFlags(ti)) : 0u, raw ? static_cast<unsigned>(ent->GetRenderFlags0(ti)) : 0u, targetIsObject_ ? 1 : 0, st,
+                    (!hideTarget_ || targetIsObject_ || ti == 0 || st == 4) ? "SHOWN" : "hidden");
+                if (lastTargetLine_ != b)
+                {
+                    lastTargetLine_ = b;
+                    FILE* f = nullptr;
+                    if (::fopen_s(&f, targetLog_.c_str(), "ab") == 0 && f != nullptr)
+                    {
+                        ::fprintf(f, "%llu  %s\r\n", static_cast<unsigned long long>(::GetTickCount64()), b);
+                        ::fclose(f);
+                    }
+                }
+            }
         }
         if (!enabled_)
         {
@@ -370,6 +394,24 @@ namespace farplaneui
             set(hideBuffs_);
         else if (what == "castbar")
             set(hideCastBar_);
+        else if (what == "targetlog")
+        {
+            if (targetLog_.empty())
+            {
+                const std::string dir = std::string(ctx.core->GetInstallPath()) + "\\logs";
+                ::CreateDirectoryA(dir.c_str(), nullptr);
+                targetLog_ = dir + "\\farplaneui_target.log";
+                ::DeleteFileA(targetLog_.c_str());
+                lastTargetLine_.clear();
+                ctx.Print("Native UI: logging the target to " + targetLog_ + ". /fpui native targetlog again to stop.");
+            }
+            else
+            {
+                ctx.Print("Native UI: target log off. Log: " + targetLog_);
+                targetLog_.clear();
+            }
+            return true;
+        }
         else if (what == "windows")
         {
             ListWindows(ctx);

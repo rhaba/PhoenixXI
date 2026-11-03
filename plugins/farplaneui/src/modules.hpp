@@ -207,6 +207,14 @@ namespace farplaneui
         std::string source_, status_;
         IDirect3DTexture8* arrowTex_{nullptr}; // generated atlas of 64 pre-rotated player arrows
         bool enemies_{true};                   // draw nearby monsters as dots
+        // Ctrl + mouse wheel zoom: Ashita's mouse hook (works even when another window overlaps the map in
+        // ImGui) adds notches here while the cursor is over the map; Render applies them.
+        IAshitaCore* core_{nullptr};
+        Rect mapRect_{};
+        float wheel_{0};
+        double hoverAt_{0};
+        ImVec2 hoverPos_{-1, -1};
+        static auto __stdcall MouseCallback(uint32_t msg, WPARAM w, LPARAM l, bool blocked) -> BOOL;
         void Scan(Context& ctx);
         void BuildArrow(Context& ctx);
         auto ReadEntry(uint32_t i, MapEntry& e) const -> bool;
@@ -216,6 +224,7 @@ namespace farplaneui
         void FreeMap(void);
 
     public:
+        void Initialize(Context& ctx) override;
         void Release(void) override;
         auto Name(void) const -> const char* override { return "minimap"; }
         auto Title(void) const -> const char* override { return "Minimap"; }
@@ -277,6 +286,8 @@ namespace farplaneui
         bool enabled_{true};   // master switch: /fpui native all on|off (off = the game UI is left alone)
         bool noTarget_{false}; // nothing targeted (shown by /fpui native)
         bool targetIsObject_{false}; // a door / counter etc. is targeted: the game's own target frame shows
+        std::string targetLog_;      // /fpui native targetlog: file, empty = off
+        std::string lastTargetLine_;
         uint32_t status_{0};
         void ApplyLive(bool restoreAll);
         void ListWindows(Context& ctx);
@@ -399,8 +410,10 @@ namespace farplaneui
             std::string text;
             Rgba color{1, 1, 1, 1};
             uint16_t itemId{0}; // icon (0 = none, 0xFFFF = gil)
-            bool countdown{false};
+            bool countdown{false};      // invitation / trade request: shows the time it arrived
             double born{0}, expires{0};
+            int kind{0};                // 0 plain, 1 party / alliance invitation, 2 trade request
+            std::string who, clock;     // the other player; "HH:MM" it arrived
         };
 
     private:
@@ -411,7 +424,7 @@ namespace farplaneui
             "Party invitations", "Trade requests"};
         static constexpr const char* kTypeDescs[kTypes] = {"XP, limit and capacity points gained.", "Items added to any bag.",
             "Gil gained or spent.", "Combat, magic and crafting skill ups.", "Newly obtained key items.", "New items in the treasure pool.",
-            "Party and alliance invitations, with a 90s countdown.", "Incoming trade requests, with a 30s countdown."};
+            "Party and alliance invitations; closes when you join (or after 90s).", "Incoming trade requests; closes when answered (or after 30s)."};
         bool show_{true};
         bool on_[kTypes]{true, true, true, true, true, true, true, true};
         float lifetime_{6.0f}, offsetX_{0.0f}, offsetY_{0.0f};
@@ -502,6 +515,10 @@ namespace farplaneui
     {
         bool show_{true}, items_{true}, showPercent_{true};
         float width_{260.0f}, offsetX_{0.0f}, offsetY_{0.0f};
+        int style_{0};             // 0 ring around your feet, 1 bar, 2 both
+        float ringSize_{1.0f};
+        bool ringLabel_{true};     // ring style: spell name + percent where the bar was
+        int spellColor_{0}, itemColor_{1}; // kCastColors index (ring and bar)
         std::string name_;
         bool item_{false};
         float lastPct_{0};
@@ -525,6 +542,10 @@ namespace farplaneui
         float iconSize_{24.0f}, x_{6.0f}, y_{6.0f}; // top-left corner of the grid, like the native icons
         bool locked_{true}; // unlocked: drag the icons to move them
         int perRow_{16};
+        bool enterDown_{false}; // Enter edge for the game's status icon cursor (confirm = cancel the effect)
+        int lastCursor_{-2};
+        std::string alignLog_; // /fpui status align: log file (empty = off)
+        void LogAlign(Context& ctx, uintptr_t obj, int cursor, int count) const;
 
     public:
         auto Name(void) const -> const char* override { return "status"; }
@@ -567,6 +588,7 @@ namespace farplaneui
         };
         bool enabled_{true}, summary_{false};
         bool active_{false}, open_{false}, mine_{false}, summarySent_{false}, preview_{false};
+        bool popFront_{false}; // a check just started: bring the box in front of other windows once
         std::vector<Member> members_;
         std::string initiator_;
         double startedAt_{0}, endedAt_{0};
@@ -578,6 +600,7 @@ namespace farplaneui
     public:
         auto Name(void) const -> const char* override { return "readycheck"; }
         auto Title(void) const -> const char* override { return "Ready Check"; }
+        auto ReadsBlockedText(void) const -> bool override { return true; }
         void Load(IConfigurationManager* cfg, const char* alias) override;
         void Save(IConfigurationManager* cfg, const char* alias) const override;
         void Frame(Context& ctx) override;
@@ -659,6 +682,41 @@ namespace farplaneui
         void RenderSettings(Context& ctx, IGuiManager* gui) override;
     };
 
+    // Controller support for FarplaneUI's own menus (pad.hpp; /fpui pad).
+    class PadModule final : public IModule
+    {
+        IAshitaCore* core_{nullptr};
+        bool enabled_{true};
+        bool log_{false}, inBuff_{false};
+        std::string lastMenu_{"?"};
+        uint32_t dStates_{0}, dStateSize_{0};
+        std::vector<std::string> pending_;
+        std::array<uint32_t, 64> obj_{}, hdr_{};
+        std::string logFile_;
+        void Queue(const std::string& line);
+        void Write(const std::string& line) const;
+        static auto __stdcall DDataCallback(LPDIRECTINPUTDEVICE8A dev, DWORD size, LPDIDEVICEOBJECTDATA data, LPDWORD count, DWORD flags, DWORD extra) -> HRESULT;
+        static auto __stdcall DStateCallback(LPDIRECTINPUTDEVICE8A dev, DWORD size, LPVOID data) -> HRESULT;
+        static auto __stdcall DButtonCallback(uint32_t* offset, int32_t* state, bool blocked, bool injected) -> BOOL;
+
+    public:
+        // Per action (pad::Action): button number (-1 = the D-pad), pressed this frame, down since, next repeat.
+        std::array<int, 11> buttons_;
+        std::array<bool, 11> pressed_{};
+        std::array<double, 11> downAt_{}, repeatAt_{};
+
+        PadModule(void);
+        auto Name(void) const -> const char* override { return "pad"; }
+        auto Title(void) const -> const char* override { return "Controller"; }
+        void Initialize(Context& ctx) override;
+        void Release(void) override;
+        void Load(IConfigurationManager* cfg, const char* alias) override;
+        void Save(IConfigurationManager* cfg, const char* alias) const override;
+        void Frame(Context& ctx) override;
+        void RenderSettings(Context& ctx, IGuiManager* gui) override;
+        auto Command(Context& ctx, const std::vector<std::string>& args) -> bool override;
+    };
+
     // DPS meter: party / alliance damage from action packets (message list derived from Parse, BSD).
     class DpsModule final : public IModule
     {
@@ -710,6 +768,8 @@ namespace farplaneui
         uint32_t hpIdx_{0};
         double pulseStart_{-100};      // TP move / cast pulse
         uint32_t pulseActor_{0};
+        int pulseKind_{0};             // 1 TP move, 2 spell (ring colour while pulsing)
+        bool warnColors_{true};        // recolour the ring while the target readies a move / casts
         std::string pulseLabel_;
         bool info_{true}; // ring info overlay
         ImVec2 aTop_{}, aBot_{}, aRight_{}, aCen_{};
@@ -806,6 +866,8 @@ namespace farplaneui
         float lostTime_{0.45f}, outTime_{0.6f};
         int maxShown_{4};
         bool hideFirstPerson_{true};
+        int depthMode_{1};     // 0 always on top, 1 depth split, 2 fully depth-tested (WIRING.md D6)
+        float crossfade_{0.15f};
         bool preview_{false};  // settings: cycle 4 -> 0 every 1.5 s while the settings window is open
         int previewCount_{-1}; // /fpui shadows preview <0-4>; -1 = off
         double previewAt_{0};
@@ -815,6 +877,19 @@ namespace farplaneui
         double lastAt_{0};
         auto Count(Context& ctx) const -> int;
 
+        // Blink shimmer (WIRING.md K1-K6).
+        bool blinkOn_{true}, blinkFlashOnCast_{true}, blinkRipple_{true}, blinkPreview_{false};
+        int blinkColor_{6}, blinkMotes_{200};
+        int whenUtsusemi_{0}; // 0 dim, 1 hide, 2 both
+        float blinkOpacity_{0.9f}, blinkSize_{1.0f}, blinkSpeed_{1.0f}, blinkFadeOut_{0.8f};
+        enum class Blink { Off, FlashIn, Active, FadeOut } phase_{Blink::Off};
+        bool blinkPrev_{false};
+        float phaseT_{0}, rippleT_{99}, blinkClock_{0};
+        double zoneAt_{-99}, blinkPreviewAt_{0};
+        bool previewBlinkUp_{false};
+        auto HasBlink(Context& ctx) const -> bool;
+        void FrameBlink(Context& ctx, float dt, int utsusemi);
+
     public:
         ShadowModule(void);
         auto Name(void) const -> const char* override { return "shadows"; }
@@ -822,9 +897,10 @@ namespace farplaneui
         void Load(IConfigurationManager* cfg, const char* alias) override;
         void Save(IConfigurationManager* cfg, const char* alias) const override;
         void Frame(Context& ctx) override;
-        auto SettingsSections(void) const -> std::vector<const char*> override { return {"Style", "Look", "Behaviour"}; }
+        auto SettingsSections(void) const -> std::vector<const char*> override { return {"Style", "Look", "Behaviour", "Blink", "Layering"}; }
         void RenderSettings(Context& ctx, IGuiManager* gui) override;
         auto Command(Context& ctx, const std::vector<std::string>& args) -> bool override;
+        void IncomingPacket(Context& ctx, uint16_t id, uint32_t size, const uint8_t* data) override;
     };
 } // namespace farplaneui
 

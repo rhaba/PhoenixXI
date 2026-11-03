@@ -19,6 +19,18 @@
 
 namespace farplaneui::cfg
 {
+    // Controller navigation of the settings cards (pad.hpp): one card has focus; up / down move it,
+    // left / right change it, confirm toggles / presses. The host calls NavFrame once per frame before the
+    // page renders (focus moves within last frame's card count) and resets `focus` when the page changes.
+    struct NavState
+    {
+        bool on{false};
+        int focus{0}, count{0}, lastCount{0};
+        bool moved{false};
+    };
+    auto Nav(void) -> NavState&;
+    void NavFrame(bool on);
+
     class Grid
     {
     public:
@@ -46,7 +58,7 @@ namespace farplaneui::cfg
         void Open(void);
         void Close(void);
         // Starts a card: label + description; leaves the cursor where a control of `controlW` goes.
-        void Card(const char* label, const char* desc, float controlW);
+        void Card(const char* label, const char* desc, float controlW, bool focusable = true);
         void EndCard(const char* desc);
 
         IGuiManager* gui_;
@@ -56,6 +68,7 @@ namespace farplaneui::cfg
         ImVec2 cardStart_{};
         float cardW_{0}, labelBottom_{0};
         int cell_{0}; // cells in the current table (a row line goes above each row after the first)
+        bool focused_{false}; // this card has the controller focus
     };
 } // namespace farplaneui::cfg
 

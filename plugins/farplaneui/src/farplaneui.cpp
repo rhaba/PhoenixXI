@@ -7,6 +7,7 @@
 
 #include "farplaneui.hpp"
 #include "cfgui.hpp"
+#include "pad.hpp"
 #include "lsgate.hpp"
 #include "ember.hpp"
 
@@ -71,6 +72,7 @@ namespace farplaneui
         modules_.push_back(std::make_unique<DpsModule>());
         modules_.push_back(std::make_unique<QuestModule>());
         modules_.push_back(std::make_unique<ShadowModule>());
+        modules_.push_back(std::make_unique<PadModule>());
         modules_.push_back(std::make_unique<NativeUiModule>(chat_->HideNativeFlag()));
     }
 
@@ -80,7 +82,7 @@ namespace farplaneui
     auto plugin::GetAuthor(void) const -> const char* { return "Farplane Team"; }
     auto plugin::GetDescription(void) const -> const char* { return "A holistic refined/ornate UI replacement for Final Fantasy XI."; }
     auto plugin::GetLink(void) const -> const char* { return ""; }
-    auto plugin::GetVersion(void) const -> double { return 0.112; }
+    auto plugin::GetVersion(void) const -> double { return 0.113; }
     auto plugin::GetInterfaceVersion(void) const -> double { return ASHITA_INTERFACE_VERSION; }
     auto plugin::GetPriority(void) const -> int32_t { return 0; }
     auto plugin::GetFlags(void) const -> uint32_t
@@ -229,7 +231,11 @@ namespace farplaneui
         const float dockY = L.screenH - t.S(t.dockH);
         L.dock = Rect{M, dockY, L.screenW - 2 * M, L.screenH - dockY - M};
         const float top = L.dock.y + P, ih = L.dock.h - 2 * P;
-        const float eqW   = 4 * t.S(t.cell) + 3 * t.S(t.cellGap);
+        // Equipment: four square cells plus the gil row fill the dock's height (any resolution, aspect or dock
+        // height); the width follows. Never smaller than the theme's cell, never past 2x it.
+        const float cellGap = t.S(t.cellGap);
+        const float eqCell  = std::clamp((ih - (t.S(t.gilH) + 2.0f) - 3 * cellGap) / 4.0f, t.S(t.cell), t.S(t.cell) * 2.0f);
+        const float eqW     = 4 * eqCell + 3 * cellGap;
         const float fixed = ih + t.S(t.dpsW) + t.S(t.partyW) + eqW + 3 * G + t.S(t.laneGapLeft) + t.S(t.laneGapRight) + 2 * P + 2 * M + t.S(200); // 200: minimum buff lane
         const float chatW = std::max(t.S(420), std::min(std::floor(L.screenW * chatWidth_), L.screenW - fixed));
         L.chat      = Rect{L.dock.x + P, top, chatW, ih};
@@ -331,7 +337,7 @@ namespace farplaneui
         if (sub == "status")
         {
             char b[256]{};
-            ::sprintf_s(b, "FarplaneUI v0.11.2 build %s %s | camera valid=%d captures=%u rejected=%u", __DATE__, __TIME__,
+            ::sprintf_s(b, "FarplaneUI v0.11.3 build %s %s | camera valid=%d captures=%u rejected=%u", __DATE__, __TIME__,
                 ctx_.camera.valid ? 1 : 0, ctx_.camera.captures, ctx_.camera.rejected);
             Print(b);
             ReportStatus();
@@ -380,13 +386,16 @@ namespace farplaneui
 
     auto plugin::HandleIncomingText(int32_t mode, bool, const char* message, int32_t*, bool*, char* modifiedMessage, bool injected, bool blocked) -> bool
     {
-        if (blocked || !active_)
+        if (!active_)
             return false;
         // Another plugin/addon may already have rewritten the line; show what the game would show.
         const char* text = (modifiedMessage != nullptr && modifiedMessage[0] != '\0') ? modifiedMessage : message;
         bool block = false;
         for (size_t i = 0; i < modules_.size(); ++i)
         {
+            // A line someone else blocked only goes to read-only modules (the ready check), never to the chat.
+            if (blocked && !modules_[i]->ReadsBlockedText())
+                continue;
             const bool timed = perf_.on;
             const double t0  = timed ? Qpc() : 0;
             block |= modules_[i]->IncomingText(ctx_, mode, text, injected);
@@ -421,6 +430,8 @@ namespace farplaneui
             m->Direct3DInit(ctx_);
         // Target ring inside the 3D scene; the target module falls back to a 2D ring without it.
         worldRing_.Install(device, &ctx_);
+        mask_->mask.beforeDrawUser_ = &worldRing_;
+        mask_->mask.beforeDraw_     = [](void* ring) { static_cast<WorldRingRenderer*>(ring)->DrawFront(); };
         d3dInit_ = true;
         return true;
     }
@@ -500,6 +511,7 @@ namespace farplaneui
             mask_->mask.overlay_.clear();
         ctx_.ring.want    = false; // the target module re-requests the 3D ring every frame
         ctx_.shadows.want = false; // and the shadows module its shadows
+        ctx_.cast.want    = false; // and the cast bar its ring
         const double presentStart = perf_.on ? Qpc() : 0;
         for (size_t i = 0; i < modules_.size(); ++i)
         {
@@ -623,7 +635,7 @@ namespace farplaneui
         ::sprintf_s(name, "\\farplaneui_perf_%04u-%02u-%02u_%02u%02u%02u.log", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
         perf_.file = dir + name;
         char b[512]{};
-        ::sprintf_s(b, "FarplaneUI v0.11.2 perf log - %.1f minutes, one entry per 5 seconds. Times in ms.\r\n"
+        ::sprintf_s(b, "FarplaneUI v0.11.3 perf log - %.1f minutes, one entry per 5 seconds. Times in ms.\r\n"
                        "gap = time between frames (the game's frame time; over 50 ms counts as a hitch). ours = FarplaneUI work in that frame.\r\n"
                        "modules: average / worst single frame (Frame + Render; text and packet time are in the average).\r\n\r\n",
             minutes);
@@ -884,10 +896,42 @@ namespace farplaneui
     // and the selected section's settings as a two-column grid of cards (cfgui.hpp).
     void plugin::RenderSettingsWindow(IGuiManager* gui)
     {
+        // Controller: the Open button (touchpad) opens / closes the settings; any controller action while they
+        // are open hands the window to the controller (and holds its buttons from the game) until it closes.
+        if (pad::Pressed(pad::Open))
+        {
+            show_settings_window_ = !show_settings_window_;
+            padNav_               = show_settings_window_;
+            cfg::Nav().focus      = 0;
+        }
+        else if (show_settings_window_ && !padNav_)
+            for (int a = 0; a < pad::kActions; ++a)
+                padNav_ |= pad::Pressed(static_cast<pad::Action>(a));
+        bool padPage = false; // the controller changed the category / sub-tab this frame
+        if (show_settings_window_ && padNav_)
+        {
+            const int pages = static_cast<int>(modules_.size()) + 1; // + Performance
+            if (pad::Pressed(pad::Cancel))
+                show_settings_window_ = false;
+            if (pad::Pressed(pad::NextPage))
+                settingsModule_ = (settingsModule_ + 1) % pages, settingsSection_ = 0, padPage = true;
+            if (pad::Pressed(pad::PrevPage))
+                settingsModule_ = (settingsModule_ + pages - 1) % pages, settingsSection_ = 0, padPage = true;
+            if (pad::Pressed(pad::NextSection))
+                ++settingsSection_, padPage = true;
+            if (pad::Pressed(pad::PrevSection))
+                settingsSection_ = std::max(0, settingsSection_ - 1), padPage = true;
+            if (padPage)
+                cfg::Nav().focus = 0;
+        }
+        if (!show_settings_window_)
+            padNav_ = false;
+        pad::SetCapture(show_settings_window_ && padNav_);
         ctx_.settingsOpen = show_settings_window_;
         if (!show_settings_window_)
         {
             ctx_.settingsModule = nullptr;
+            cfg::NavFrame(false);
             return;
         }
         const Palette& c = *ctx_.palette;
@@ -1004,6 +1048,8 @@ namespace farplaneui
                     char id[16]{};
                     ::sprintf_s(id, "nav%u", static_cast<unsigned>(i));
                     const bool sel = static_cast<int>(i) == settingsModule_;
+                    if (sel && padPage)
+                        gui->SetScrollHereY(0.5f);
                     if (row(modules_[i]->Title(), id, sel, 25.0f, false) && !sel)
                         settingsModule_ = static_cast<int>(i), settingsSection_ = 0;
                 }
@@ -1032,6 +1078,7 @@ namespace farplaneui
             if (gui->BeginChild("##fpui_cfg_content", ImVec2(gui->GetContentRegionAvail().x - 10, bodyH), ImGuiChildFlags_AlwaysUseWindowPadding))
             {
                 ctx_.settingsSection = settingsSection_;
+                cfg::NavFrame(padNav_);
                 if (mod != nullptr)
                     mod->RenderSettings(ctx_, gui);
                 else
@@ -1060,7 +1107,10 @@ namespace farplaneui
             gui->PopStyleVar(2);
             // Footer hint.
             gui->SetCursorScreenPos(ImVec2(wp.x + 18, wp.y + gui->GetWindowSize().y - footH - 2));
-            gui->TextColored(ToVec4(dim), "Hold - / + to repeat   |   Shift = x10   |   Ctrl+click a slider to type a value");
+            if (padNav_)
+                gui->TextColored(ToVec4(dim), "D-pad: move / change   |   Confirm: toggle / press   |   L1 / R1: category   |   L2 / R2: sub-tab   |   Cancel: close");
+            else
+                gui->TextColored(ToVec4(dim), "Hold - / + to repeat   |   Shift = x10   |   Ctrl+click a slider to type a value");
         }
         gui->Dummy(ImVec2(0, 0)); // ImGui 1.92: an item must follow any SetCursorScreenPos before End
         gui->End();
@@ -1070,7 +1120,7 @@ namespace farplaneui
 
     void plugin::ReportStatus(void)
     {
-        Print(std::string("FarplaneUI v0.11.2 build ") + __DATE__ + " " + __TIME__ + " loaded (/fpui status for diagnostics). /fpui opens the settings. Modules: mask, chat, minimap, inventory, party, equip, target, targetbar, points, ticks, notify, recast, castbar, status, enemies, readycheck, alliance, compass, cmdmenu, bars, dps, quests, shadows, native.");
+        Print(std::string("FarplaneUI v0.11.3 build ") + __DATE__ + " " + __TIME__ + " loaded (/fpui status for diagnostics). /fpui opens the settings. Modules: mask, chat, minimap, inventory, party, equip, target, targetbar, points, ticks, notify, recast, castbar, status, enemies, readycheck, alliance, compass, cmdmenu, bars, dps, quests, shadows, native.");
         mask_->Report(ctx_);
         std::string missingArt;
         int ok = 0, total = 0;

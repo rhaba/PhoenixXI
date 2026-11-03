@@ -344,6 +344,8 @@ namespace farplaneui
         if (drawnThisFrame_ || sprite_ == nullptr)
             return;
         drawnThisFrame_ = true;
+        if (beforeDraw_ != nullptr)
+            beforeDraw_(beforeDrawUser_);
 
         if (!s.enabled || hidden)
         {
