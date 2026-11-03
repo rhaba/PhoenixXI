@@ -272,18 +272,22 @@ namespace farplaneui
             float hpp, mpp;
             bool hasMp, otherZone, faded, target;
             bool leader{false}, sync{false}; // party leader (flag 0x04 / leader id), level sync target (flag 0x100)
+            bool pet{false};                 // your pet's row (HP / MP are percents: the game sends no values for pets)
         };
         // Jobs with MP (main or sub): WHM BLM RDM PLD DRK SMN BLU SCH GEO RUN.
         auto mpJob = [](uint8_t j) { return j == 3 || j == 4 || j == 5 || j == 7 || j == 8 || j == 15 || j == 16 || j == 20 || j == 21 || j == 22; };
         std::vector<M> ms;
         const bool demo = NowSec() < testUntil_;
         if (demo)
+        {
             ms = {{0, 1, "Retainer", "NIN8/BRD4", 1310, 0, 1200, 0.82f, 0.0f, false, false, false, false, true, false},
                 {9, 2, "Kelz", "WHM7/BLM3", 682, 812, 600, 0.66f, 0.80f, true, false, false, true, false, true},
                 {9, 3, "Eddythegreat", "WAR7/WHM3", 1328, 96, 300, 0.75f, 0.55f, true, false, false, false},
                 {9, 4, "Cypher", "PLD7/WAR3", 354, 220, 2100, 0.24f, 0.95f, true, false, false, false},
                 {9, 5, "Ayame", "SAM7/WAR3", 1402, 0, 2900, 0.91f, 0.0f, false, false, true, false},
                 {9, 6, "Lyra", "RDM7/BLM3", 988, 512, 100, 0.55f, 0.60f, true, true, true, false}};
+            ms.insert(ms.begin() + 1, M{99, 7, "Carbuncle", "pet", 76, 40, 450, 0.76f, 0.40f, true, false, false, false, false, false, true});
+        }
         else
         {
             const uint16_t myZone = party->GetMemberZone(0);
@@ -322,8 +326,59 @@ namespace farplaneui
                     static_cast<float>(party->GetMemberMPPercent(i)) / 100.0f, hasMp, other, faded, ti != 0 && ti == tIdx, leader, (flags & 0x100u) != 0});
             }
         }
+        // Your pet: a row right under yours (name, HP %, MP %, TP; IEntity pet index, IPlayer pet MP / TP).
+        if (!demo)
+        {
+            const uint32_t me  = party->GetMemberTargetIndex(0);
+            const uint32_t pet = me != 0 && me < 2304 && ent->GetRawEntity(me) != nullptr ? ent->GetPetTargetIndex(me) : 0;
+            auto* player       = mm->GetPlayer();
+            if (!petLog_.empty()) // /fpui party petlog: one line per change of what decides the pet row
+            {
+                const bool raw = pet != 0 && pet < 2304 && ent->GetRawEntity(pet) != nullptr;
+                char b[360]{};
+                ::sprintf_s(b, "me %u -> pet index %u%s | name \"%s\" hp %u%% type %u spawn 0x%X render 0x%X claim 0x%X | player pet mp %u%% tp %u", me, pet,
+                    raw ? "" : " (no entity)", raw && ent->GetName(pet) != nullptr ? ent->GetName(pet) : "", raw ? ent->GetHPPercent(pet) : 0u,
+                    raw ? static_cast<unsigned>(ent->GetType(pet)) : 0u, raw ? static_cast<unsigned>(ent->GetSpawnFlags(pet)) : 0u,
+                    raw ? static_cast<unsigned>(ent->GetRenderFlags0(pet)) : 0u, raw ? static_cast<unsigned>(ent->GetClaimStatus(pet)) : 0u,
+                    player != nullptr ? player->GetPetMPPercent() : 0u, player != nullptr ? player->GetPetTP() : 0u);
+                std::string line = b;
+                // Monsters claimed by you (a charmed pet may show up here if the pet index stays 0).
+                const uint32_t myId = party->GetMemberServerId(0);
+                for (uint32_t e = 0; e < 0x400; ++e)
+                    if (e != pet && ent->GetRawEntity(e) != nullptr && (ent->GetSpawnFlags(e) & 0x10u) != 0 && ent->GetHPPercent(e) > 0 &&
+                        (ent->GetClaimStatus(e) & 0x00FFFFFFu) == (myId & 0x00FFFFFFu) && myId != 0)
+                    {
+                        char c[96]{};
+                        ::sprintf_s(c, " | claimed by you: %u \"%s\" claim 0x%X", e, ent->GetName(e) != nullptr ? ent->GetName(e) : "", static_cast<unsigned>(ent->GetClaimStatus(e)));
+                        line += c;
+                    }
+                if (line != lastPetLine_)
+                {
+                    lastPetLine_ = line;
+                    FILE* f = nullptr;
+                    if (::fopen_s(&f, petLog_.c_str(), "ab") == 0 && f != nullptr)
+                    {
+                        ::fprintf(f, "%llu  %s\r\n", static_cast<unsigned long long>(::GetTickCount64()), line.c_str());
+                        ::fclose(f);
+                    }
+                }
+            }
+            if (pet != 0 && pet < 2304 && ent->GetRawEntity(pet) != nullptr && ent->GetHPPercent(pet) > 0 && ent->GetName(pet) != nullptr && player != nullptr)
+            {
+                const uint32_t sid = ent->GetServerId(pet);
+                const uint8_t hpp = ent->GetHPPercent(pet), mpp = player->GetPetMPPercent();
+                if (mpp > 0)
+                    mpSeen_.insert(sid);
+                auto* tgt = mm->GetTarget();
+                const uint32_t tIdx = tgt != nullptr ? tgt->GetTargetIndex(tgt->GetIsSubTargetActive() != 0 ? 1u : 0u) : 0;
+                M row{99, sid, ent->GetName(pet), "pet", hpp, mpp, player->GetPetTP(), hpp / 100.0f, mpp / 100.0f, mpSeen_.count(sid) != 0, false, false,
+                    tIdx == pet, false, false, true};
+                ms.insert(ms.empty() ? ms.end() : ms.begin() + 1, row);
+            }
+        }
         rowsY_.clear();
-        const float rowH = ctx.layout.party.h / 6.0f;
+        const size_t rowsN = std::max<size_t>(6, ms.size()); // six members plus a pet squeeze to seven rows
+        const float rowH   = ctx.layout.party.h / static_cast<float>(rowsN);
         // Vertical layout in 1080p px for a 44 px row (40 + 4 gap), squeezed when the dock row is shorter.
         const float k = std::min(1.0f, rowH / t.S(44.0f));
         auto V = [&](float v) { return t.S(v) * k; };
@@ -374,13 +429,14 @@ namespace farplaneui
             const float numW = gui->CalcTextSize("99999").x + t.S(6);
             gui->PopFont();
             const float bw = std::max(t.S(60.0f), std::min(t.S(230.0f), w - nameW - numW));
-            for (size_t i = 0; i < ms.size() && i < 6; ++i)
+            for (size_t i = 0; i < ms.size() && i < rowsN; ++i)
             {
                 const M& m    = ms[i];
                 const float y = o.y + rowH * static_cast<float>(i);
                 const float c = y + std::max(0.0f, (rowH - V(40.0f)) * 0.5f); // row content top
                 const float a = m.faded ? 0.40f : 1.0f;
-                rowsY_.push_back({m.slot, m.serverId, y, rowH});
+                if (!m.pet) // the buff lane lines up with party members only
+                    rowsY_.push_back({m.slot, m.serverId, y, rowH});
                 if (i > 0 && ctx.white != nullptr)
                     ui::ImageAt(gui, ctx.white, ImVec2(o.x, y), ImVec2(w, 1), ImVec2(0, 0), ImVec2(1, 1), t.rowSep);
                 // Current target: soft outline behind name + bars, and a chevron left of the name.
@@ -403,8 +459,9 @@ namespace farplaneui
                 const int icons  = (m.leader ? 1 : 0) + (m.sync ? 1 : 0);
                 const std::string nm = Fit(gui, m.name, nameW - t.S(8) - static_cast<float>(icons) * (isz + t.S(5)));
                 const float nameY = c + V(4) - t.S(2);
-                ember::Text(gui, ImVec2(o.x, nameY), Rgba{ivory.r, ivory.g, ivory.b, a}, nm.c_str());
-                float ix = o.x + gui->CalcTextSize(nm.c_str()).x + t.S(5);
+                const float nx    = o.x + (m.pet ? t.S(12) : 0.0f); // the pet's name sits indented under yours
+                ember::Text(gui, ImVec2(nx, nameY), Rgba{ivory.r, ivory.g, ivory.b, a}, nm.c_str());
+                float ix = nx + gui->CalcTextSize(nm.c_str()).x + t.S(5);
                 const float iy = nameY + (gui->GetTextLineHeight() - isz) * 0.5f;
                 gui->PopFont();
                 for (const char* file : {m.leader ? "leader" : nullptr, m.sync ? "sync" : nullptr})
@@ -416,7 +473,7 @@ namespace farplaneui
                     ix += isz + t.S(5);
                 }
                 gui->PushFont(nullptr, std::max(9.0f, t.S(10)));
-                ember::Text(gui, ImVec2(o.x, c + V(22)), Rgba{t.muted.r, t.muted.g, t.muted.b, a}, m.job.c_str());
+                ember::Text(gui, ImVec2(nx, c + V(22)), Rgba{t.muted.r, t.muted.g, t.muted.b, a}, m.job.c_str());
                 gui->PopFont();
                 if (m.faded)
                 {
@@ -452,9 +509,9 @@ namespace farplaneui
                     bar(ImVec2(bx, c + V(4)), ImVec2(bw, V(9)), hp, ghost, hc, a * pulse);
                     bar(ImVec2(bx, c + V(16)), ImVec2(bw, V(9)), m.otherZone ? 0.0f : m.mpp, 0.0f, t.mp, a);
                     gui->PushFont(nullptr, std::max(9.0f, t.S(11)));
-                    ::sprintf_s(num, "%u", m.hp);
+                    ::sprintf_s(num, m.pet ? "%u%%" : "%u", m.hp);
                     ember::Text(gui, ImVec2(bx + bw + t.S(6), c + V(4) + (V(9) - gui->GetTextLineHeight()) * 0.5f), Rgba{ivory.r, ivory.g, ivory.b, a}, num);
-                    ::sprintf_s(num, "%u", m.mp);
+                    ::sprintf_s(num, m.pet ? "%u%%" : "%u", m.mp);
                     ember::Text(gui, ImVec2(bx + bw + t.S(6), c + V(16) + (V(9) - gui->GetTextLineHeight()) * 0.5f), Rgba{t.mp.r, t.mp.g, t.mp.b, a}, num);
                     gui->PopFont();
                 }
@@ -462,7 +519,7 @@ namespace farplaneui
                 {
                     bar(ImVec2(bx, c + V(8)), ImVec2(bw, V(21)), hp, ghost, hc, a * pulse);
                     gui->PushFont(nullptr, std::max(10.0f, t.S(12)));
-                    ::sprintf_s(num, "%u", m.hp);
+                    ::sprintf_s(num, m.pet ? "%u%%" : "%u", m.hp);
                     ember::Text(gui, ImVec2(bx + bw + t.S(6), c + V(8) + (V(21) - gui->GetTextLineHeight()) * 0.5f), Rgba{ivory.r, ivory.g, ivory.b, a}, num);
                     gui->PopFont();
                 }
@@ -486,7 +543,7 @@ namespace farplaneui
                 gui->SetCursorScreenPos(ImVec2(o.x, y));
                 gui->PushID(static_cast<int>(i));
                 if (gui->InvisibleButton("##member", ImVec2(w, std::max(1.0f, rowH - 2))) && !demo)
-                    ctx.core->GetChatManager()->QueueCommand(-1, ("/ta " + m.name).c_str());
+                    ctx.core->GetChatManager()->QueueCommand(-1, m.pet ? "/ta <pet>" : ("/ta " + m.name).c_str());
                 if (gui->IsItemHovered())
                 {
                     char tip[160]{};
@@ -697,6 +754,24 @@ namespace farplaneui
         {
             testUntil_ = NowSec() + 30.0; // sample party + effect lines (4, 17, 6, 13, 35, 4 effects) for 30 s
             ctx.Print("Party: effects demo for 30 seconds.");
+            return true;
+        }
+        if (!args.empty() && ui::Lower(args[0]) == "petlog")
+        {
+            if (petLog_.empty())
+            {
+                const std::string dir = std::string(ctx.core->GetInstallPath()) + "\\logs";
+                ::CreateDirectoryA(dir.c_str(), nullptr);
+                petLog_ = dir + "\\farplaneui_pet.log";
+                ::DeleteFileA(petLog_.c_str());
+                lastPetLine_.clear();
+                ctx.Print("Party: logging your pet to " + petLog_ + ". /fpui party petlog again to stop.");
+            }
+            else
+            {
+                ctx.Print("Party: pet log off. Log: " + petLog_);
+                petLog_.clear();
+            }
             return true;
         }
         if (!args.empty() && ui::Lower(args[0]) == "test")

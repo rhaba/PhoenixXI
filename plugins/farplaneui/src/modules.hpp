@@ -78,6 +78,7 @@ namespace farplaneui
         std::unordered_map<uint32_t, Ghost> ghost_;
         std::set<uint32_t> mpSeen_;
         uint16_t ghostZone_{0xFFFF};
+        std::string petLog_, lastPetLine_; // /fpui party petlog: file (empty = off)
 
     public:
         auto Name(void) const -> const char* override { return "party"; }
@@ -667,7 +668,8 @@ namespace farplaneui
         };
         bool enabled_{true}, editing_{false}, scanned_{false};
         bool dialogs_{true};                           // also move game menus that open over the chat
-        std::unordered_map<uintptr_t, bool> dialog_;   // window -> opened over the chat (decided once, where the game put it)
+        std::unordered_map<uintptr_t, bool> dialog_;   // window -> over the chat where the game put it
+        std::unordered_map<uintptr_t, uint32_t> placed_; // dialog -> the position we last moved it to
         std::string log_;                              // /fpui cmdmenu log: file, empty = off
         std::string lastLog_;
         Rect user_{-1, 0, 150, 220};

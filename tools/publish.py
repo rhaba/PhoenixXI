@@ -116,8 +116,8 @@ Main files:
 
 # ---------------------------------------------------------------------------------------------
 ADDONS['farplaneui'] = dict(
-    src='farplaneui_plugin', folder='farplaneui', dest='plugins', version='0.11.6', submitted='2026-11-03',
-    note='Ashita v4 plugin (C++ DLL), source included. Hides and replaces parts of the game UI. One outgoing packet: 0x0F1 (cancel a status effect), only when the player asks for it. Replaces 0.11.0 - 0.11.4 (not yet reviewed).',
+    src='farplaneui_plugin', folder='farplaneui', dest='plugins', version='0.11.7', submitted='2026-11-03',
+    note='Ashita v4 plugin (C++ DLL), source included. Hides and replaces parts of the game UI. One outgoing packet: 0x0F1 (cancel a status effect), only when the player asks for it. Replaces 0.11.0 - 0.11.6 (not yet reviewed).',
     summary='**Author:** Spongeh, building on the work of the XIUI creators (special thanks to Shuu for the idea of '
             'packaging many UI elements into a single load). **Program:** Ashita v4 plugin (C++). **Type:** UI replacement. It reads data '
             'the client already has or receives, draws its own interface, and hides the game\'s own versions of '
@@ -131,7 +131,7 @@ This is a plugin, so the source is included next to the DLL (`src/`, built with 
 `plugins/FarplaneUI.dll` is the release build of exactly this source (MSVC 2022, x86 Release).
 
 ### Changes since 0.11.0
-0.11.0 - 0.11.4 were submitted earlier the same day and haven't been reviewed; 0.11.6 replaces them
+0.11.0 - 0.11.6 were submitted earlier the same day and haven't been reviewed; 0.11.7 replaces them
 (0.11.5 was a local test build only).
 - **0.11.1, Ctrl+R reply** (`src/modules/mod_chat.cpp`, declarations in `src/modules.hpp`): Ctrl+R
   (the game's "reply to last tell") opens FarplaneUI's own chat line prefilled with
@@ -187,6 +187,14 @@ This is a plugin, so the source is included next to the DLL (`src/`, built with 
     addon reads them) and `GetAlliancePartyLeaderServerId1`. The two icons are new PNGs in
     `resources/farplaneui/ember_dock/icons/`.
   - **Cast bar** (display only): the "Bar" style draws in the existing resting / auto-attack panel.
+- **0.11.7** (display only, reads only):
+  - **Pet row** under the player's own party row: the pet entity from `IEntity::GetPetTargetIndex` of
+    the player, its name / HP %, and `IPlayer::GetPetMPPercent` / `GetPetTP`. Clicking it sends
+    `/ta <pet>` (player click, like the party rows' `/ta <name>`).
+  - **Menus over the chat:** a window the game moves onto the chat after it opened (the item info
+    box) is moved too.
+  - `/fpui party petlog` (diagnostics, on request): writes the pet fields and the monsters claimed by
+    the player to `<Ashita>/logs/farplaneui_pet.log`.
 
 ### What it reads
 **Incoming packets.** It only listens: packets are never changed, blocked or injected.
@@ -245,7 +253,7 @@ from Ashita's resource manager. Monster and quest data are built in (see the REA
 Only these, and all but the clock are a direct result of the player typing or clicking:
 - the chat line the player typed and submitted in FarplaneUI's input (same as the game's chat bar);
 - `/clock off` on load and `/clock on` on unload (hides / restores the game's clock);
-- `/ta <name>` when the player clicks a party member's row;
+- `/ta <name>` when the player clicks a party member's row (`/ta <pet>` on the pet row);
 - `/p ...` when the player starts or answers a ready check (`/readycheck`), and `/p|/l|/l2 ...`
   when the player runs `/fpui dps report`.
 
@@ -267,7 +275,7 @@ own request to cancel one of the player's own status effects (see 0.11.3 above).
 `<Ashita>/config/farplaneui/farplaneui.ini` (settings), `quests_<character>.txt` (quest progress),
 and, only on request, diagnostics in `<Ashita>/logs/`: `farplaneui_perf_*.log`, `farplaneui_enter.log`,
 `farplaneui_pad.log`, `farplaneui_minimap.log`, `farplaneui_target.log`, `farplaneui_menu.log`,
-`farplaneui_cmdmenu.log`.
+`farplaneui_cmdmenu.log`, `farplaneui_pet.log`.
 
 ### Information shown
 Everything comes from what the client already has or from public server data: the minimap and

@@ -5,7 +5,7 @@
 
 | Version | Status | Submitted | Reviewed by | Notes |
 |---|---|---|---|---|
-| 0.11.6 | Pending review | 2026-11-03 |  | Ashita v4 plugin (C++ DLL), source included. Hides and replaces parts of the game UI. One outgoing packet: 0x0F1 (cancel a status effect), only when the player asks for it. Replaces 0.11.0 - 0.11.4 (not yet reviewed). |
+| 0.11.7 | Pending review | 2026-11-03 |  | Ashita v4 plugin (C++ DLL), source included. Hides and replaces parts of the game UI. One outgoing packet: 0x0F1 (cancel a status effect), only when the player asks for it. Replaces 0.11.0 - 0.11.6 (not yet reviewed). |
 
 **Author:** Spongeh, building on the work of the XIUI creators (special thanks to Shuu for the idea of packaging many UI elements into a single load). **Program:** Ashita v4 plugin (C++). **Type:** UI replacement. It reads data the client already has or receives, draws its own interface, and hides the game's own versions of the parts it replaces. The only packet it sends is the game's own "cancel this status effect" request, when the player right-clicks an effect or confirms it in the game's status icon cursor. Only active while the Farplane linkshell is equipped.
 <!-- /staff-approval -->
@@ -110,7 +110,7 @@ This is a plugin, so the source is included next to the DLL (`src/`, built with 
 `plugins/FarplaneUI.dll` is the release build of exactly this source (MSVC 2022, x86 Release).
 
 ### Changes since 0.11.0
-0.11.0 - 0.11.4 were submitted earlier the same day and haven't been reviewed; 0.11.6 replaces them
+0.11.0 - 0.11.6 were submitted earlier the same day and haven't been reviewed; 0.11.7 replaces them
 (0.11.5 was a local test build only).
 - **0.11.1, Ctrl+R reply** (`src/modules/mod_chat.cpp`, declarations in `src/modules.hpp`): Ctrl+R
   (the game's "reply to last tell") opens FarplaneUI's own chat line prefilled with
@@ -166,6 +166,14 @@ This is a plugin, so the source is included next to the DLL (`src/`, built with 
     addon reads them) and `GetAlliancePartyLeaderServerId1`. The two icons are new PNGs in
     `resources/farplaneui/ember_dock/icons/`.
   - **Cast bar** (display only): the "Bar" style draws in the existing resting / auto-attack panel.
+- **0.11.7** (display only, reads only):
+  - **Pet row** under the player's own party row: the pet entity from `IEntity::GetPetTargetIndex` of
+    the player, its name / HP %, and `IPlayer::GetPetMPPercent` / `GetPetTP`. Clicking it sends
+    `/ta <pet>` (player click, like the party rows' `/ta <name>`).
+  - **Menus over the chat:** a window the game moves onto the chat after it opened (the item info
+    box) is moved too.
+  - `/fpui party petlog` (diagnostics, on request): writes the pet fields and the monsters claimed by
+    the player to `<Ashita>/logs/farplaneui_pet.log`.
 
 ### What it reads
 **Incoming packets.** It only listens: packets are never changed, blocked or injected.
@@ -224,7 +232,7 @@ from Ashita's resource manager. Monster and quest data are built in (see the REA
 Only these, and all but the clock are a direct result of the player typing or clicking:
 - the chat line the player typed and submitted in FarplaneUI's input (same as the game's chat bar);
 - `/clock off` on load and `/clock on` on unload (hides / restores the game's clock);
-- `/ta <name>` when the player clicks a party member's row;
+- `/ta <name>` when the player clicks a party member's row (`/ta <pet>` on the pet row);
 - `/p ...` when the player starts or answers a ready check (`/readycheck`), and `/p|/l|/l2 ...`
   when the player runs `/fpui dps report`.
 
@@ -246,7 +254,7 @@ own request to cancel one of the player's own status effects (see 0.11.3 above).
 `<Ashita>/config/farplaneui/farplaneui.ini` (settings), `quests_<character>.txt` (quest progress),
 and, only on request, diagnostics in `<Ashita>/logs/`: `farplaneui_perf_*.log`, `farplaneui_enter.log`,
 `farplaneui_pad.log`, `farplaneui_minimap.log`, `farplaneui_target.log`, `farplaneui_menu.log`,
-`farplaneui_cmdmenu.log`.
+`farplaneui_cmdmenu.log`, `farplaneui_pet.log`.
 
 ### Information shown
 Everything comes from what the client already has or from public server data: the minimap and
@@ -257,22 +265,22 @@ repository (the same data as the mobdb 2.x addon).
 ### Files in the reviewed version
 
 `SHA256SUMS` lists the SHA-256 of every file in this version (1556 files).
-Its own SHA-256 is `292acc317f1b3ffb9a018b722aa575be519b46914296eb71dcac0862e03282f3`.
+Its own SHA-256 is `f5670b672c95ffd84d0e990b8bc4921f59c69d4bf5bfec565ed5e452e5d42172`.
 
 Main files:
 
 | File | SHA-256 |
 |---|---|
-| `plugins/FarplaneUI.dll` | `f5ff529817246f8f997adf01d2acabce642685f751481cab56ab5d9e73376a9d` |
+| `plugins/FarplaneUI.dll` | `8e048d67ac52cfe531ad29c32042846a81401b1e46fcb48154e35a58d5d54d9e` |
 | `CMakeLists.txt` | `a0a4620605c586244f2e5be89b95e14a017f1fedabdd2a8e7d6bc7bb63784111` |
-| `src/farplaneui.cpp` | `201fed42da07ea2c0c9f7e527c7dff81dcd898a9437bb8ab19eb809534eaf184` |
+| `src/farplaneui.cpp` | `2fcaf84a73b9ce2e07713b0b83e683f0047038f6ea7eecfdf845cf1879a76dda` |
 | `src/modules/mod_native.cpp` | `13e66032a47fd99c9f22574d643c4cf706050ed226c83dd66aef8cf9ba90d40a` |
-| `src/modules/mod_cmdmenu.cpp` | `6985cae407361d9304a4cca962227755531b84c0dea33de9b1760310c3f33802` |
+| `src/modules/mod_cmdmenu.cpp` | `57efab526972b1bc58b95600f1d4dc280c19c137edecc631ee92f4e5a4cb4051` |
 | `src/modules/mod_chat.cpp` | `5c940ca1456fb7c6cfc41a9a22654619decfff83776b092d7aa9d15c519816f5` |
 | `src/modules/mod_shadows.cpp` | `96d715022a01e000ea7f9fda6092c02ce198e766fa25cc64acff44861bb4f1f8` |
 | `src/modules/mod_status.cpp` | `a20821b50cb9ead83176bd44b3bc2ae50603592cde11278cba050e2c3adda551` |
 | `src/modules/mod_pad.cpp` | `284da337d28488ff731d96cdab02630a8e72a74227620ed7e33b4d96169abd76` |
-| `src/modules/mod_party.cpp` | `3e83bc33e2bb884654bf7af377b37e76382ba201d185308e4bc0c50e50769841` |
+| `src/modules/mod_party.cpp` | `bdaa20e91a50e04249fa62cb997a67f9861768258747084fe41579a2da25c92a` |
 | `src/worldring.cpp` | `98849cf5e2dcae37436fb119a081ddebf0ffb4be1a1a8788058048fe6db41ed8` |
 | `src/mask.cpp` | `701736185c23e8678e2a8cc1211ad92f2c905d5efd7d2adeab30a2a7e20293c1` |
 | `src/data/quest_db.hpp` | `52a76bb70ef80a9365f43fc24523e06cb465b6fd39090ce11650077120ee3c7b` |

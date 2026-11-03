@@ -16,7 +16,7 @@ addon once its exact version is listed as **Approved** below and on Phoenix's
 | [enemybar](addons/enemybar) | 1.5.1 | Approved 2026-10-05 | 2026-10-02 | Phoenix staff | Display only, sends nothing. Port of enemybar2; distance display off by default. |
 | [tTimers (party fork)](addons/ttimers) | 0.25-party.5 | Approved 2026-10-05 | 2026-10-02 | Phoenix staff | Fork of approved tTimers 0.25: party job ability recasts, theme, skin. |
 | [questtracker](addons/questtracker) | 0.3.1 | Pending review | 2026-10-05 | | Display only, sends nothing. Quest tracker with next steps, item / key item checks and kill counters. |
-| [FarplaneUI](plugins/farplaneui) (plugin) | 0.11.6 | Pending review | 2026-11-03 | | Ashita v4 plugin (C++), source included. One outgoing packet (cancel a status effect, on request). Replaces and hides parts of the game UI; only active with the Farplane linkshell equipped. |
+| [FarplaneUI](plugins/farplaneui) (plugin) | 0.11.7 | Pending review | 2026-11-03 | | Ashita v4 plugin (C++), source included. One outgoing packet (cancel a status effect, on request). Replaces and hides parts of the game UI; only active with the Farplane linkshell equipped. |
 
 Not approved (reviewed 2026-10-05) and removed from this repository:
 

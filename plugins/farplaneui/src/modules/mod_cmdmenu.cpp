@@ -147,12 +147,28 @@ namespace farplaneui
         const int uiW = Rd<int16_t>(manager_ + 0x80), uiH = Rd<int16_t>(manager_ + 0x82);
         const float sx = uiW >= 320 && ctx.layout.screenW > 0 ? uiW / ctx.layout.screenW : 1.0f;
         const float sy = uiH >= 240 && ctx.layout.screenH > 0 ? uiH / ctx.layout.screenH : 1.0f;
-        // A non-command menu is a "dialog" if it first opened over the chat panel (decided once per window).
+        // A non-command menu is a "dialog" while the game has it over the chat panel. Windows not over the chat are
+        // checked every frame (the game reuses some, like the item info box, and moves them onto the chat later); a
+        // dialog we moved is decided again if the game moves it after us.
         const Rect& chat = ctx.layout.chat;
         const float cl = chat.x * sx, ct = chat.y * sy, cr = (chat.x + chat.w) * sx, cb = (chat.y + chat.h) * sy;
         for (const auto& w : all)
-            if (!w.command && dialog_.find(w.window) == dialog_.end())
+        {
+            if (w.command)
+                continue;
+            const uint32_t cur = Rd<uint32_t>(w.window + 0x52);
+            const auto it      = dialog_.find(w.window);
+            bool decide        = it == dialog_.end() || !it->second;
+            if (!decide)
+                if (const auto pl = placed_.find(w.window); pl != placed_.end() && cur != pl->second)
+                {
+                    decide = true; // the game moved it again: that is where it wants it now
+                    placed_.erase(pl);
+                    orig_.erase(w.window);
+                }
+            if (decide)
                 dialog_[w.window] = FromBottom(w.name) || (chat.valid() && w.left < cr && w.right > cl && w.top < cb && w.bottom > ct);
+        }
         std::vector<Win> wins, dialogs, fromBottom;
         for (const auto& w : all)
             if (w.command)
@@ -187,6 +203,13 @@ namespace farplaneui
         }
 
         // Forget windows that closed.
+        for (auto it = placed_.begin(); it != placed_.end();)
+        {
+            bool open = false;
+            for (const auto& w : all)
+                open |= w.window == it->first;
+            it = open ? std::next(it) : placed_.erase(it);
+        }
         for (auto it = dialog_.begin(); it != dialog_.end();)
         {
             bool open = false;
@@ -223,9 +246,12 @@ namespace farplaneui
                     left = std::min<int>(left, w.left), bottom = std::max<int>(bottom, w.bottom);
                 const int dx = static_cast<int>(std::lround(std::clamp(user_.x * sx - left, -16000.0f, 16000.0f)));
                 const int dy = static_cast<int>(std::lround(std::clamp((user_.y + user_.h) * sy - bottom, -16000.0f, 16000.0f)));
-                if (dx != 0 || dy != 0)
-                    for (const auto& w : dialogs)
+                for (const auto& w : dialogs)
+                {
+                    if (dx != 0 || dy != 0)
                         CallSetPos(fn, w.window, w.left + dx, w.top + dy);
+                    placed_[w.window] = Rd<uint32_t>(w.window + 0x52); // to tell our move from the game's next one
+                }
             }
         }
         // Bottom-placed windows: x to the frame's left, the bottom edge (their y, counted from the bottom) on the frame's bottom.
@@ -244,6 +270,7 @@ namespace farplaneui
             const int ny = static_cast<int>(std::lround(std::clamp(uiH - (user_.y + user_.h) * sy, -16000.0f, 16000.0f)));
             if (w.left != nx || w.top != ny)
                 CallSetPos(fn, w.window, nx, ny);
+            placed_[w.window] = Rd<uint32_t>(w.window + 0x52);
         }
         // Dialogs the option was turned off for: put back.
         if (!dialogs_)
