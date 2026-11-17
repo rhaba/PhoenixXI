@@ -47,7 +47,7 @@ namespace farplaneui
         bool padNav_{false}; // the settings window is being driven by the controller
         int settingsModule_{0}, settingsSection_{0};
         bool reported_{false};
-        bool active_{false}, gateNotified_{false}; // linkshell gate (lsgate.hpp)
+        bool active_{false}; // set once the character is logged in (no linkshell required since 0.11.9)
         double gateCheckedAt_{0};
         bool d3dInit_{false};
         bool dirty_{false};

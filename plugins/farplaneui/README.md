@@ -5,9 +5,9 @@
 
 | Version | Status | Submitted | Reviewed by | Notes |
 |---|---|---|---|---|
-| 0.11.8 | Pending review | 2026-11-03 |  | Ashita v4 plugin (C++ DLL), source included. Hides and replaces parts of the game UI. One outgoing packet: 0x0F1 (cancel a status effect), only when the player asks for it. Replaces 0.11.0 - 0.11.7 (not yet reviewed). |
+| 0.11.9 | Pending review | 2026-11-17 |  | Ashita v4 plugin (C++ DLL), source included. Hides and replaces parts of the game UI. One outgoing packet: 0x0F1 (cancel a status effect), only when the player asks for it. Replaces 0.11.0 - 0.11.8 (not yet reviewed). |
 
-**Author:** Spongeh, building on the work of the XIUI creators (special thanks to Shuu for the idea of packaging many UI elements into a single load). **Program:** Ashita v4 plugin (C++). **Type:** UI replacement. It reads data the client already has or receives, draws its own interface, and hides the game's own versions of the parts it replaces. The only packet it sends is the game's own "cancel this status effect" request, when the player right-clicks an effect or confirms it in the game's status icon cursor. Only active while the Farplane linkshell is equipped.
+**Author:** Spongeh, building on the work of the XIUI creators (special thanks to Shuu for the idea of packaging many UI elements into a single load). **Program:** Ashita v4 plugin (C++). **Type:** UI replacement. It reads data the client already has or receives, draws its own interface, and hides the game's own versions of the parts it replaces. The only packet it sends is the game's own "cancel this status effect" request, when the player right-clicks an effect or confirms it in the game's status icon cursor. Starts once the character is logged in; no linkshell is required.
 <!-- /staff-approval -->
 
 ---
@@ -40,8 +40,7 @@ dock:
 While FarplaneUI is loaded it hides the game's own versions of those (party list, target frame,
 compass, clock, chat log window, status icons and cast bar). Everything is restored when it unloads.
 
-The UI only switches on while the **Farplane** linkshell is equipped. Without it the plugin stays
-dormant and changes nothing.
+The UI switches on once your character is logged in. No linkshell is required.
 
 ## Install
 
@@ -115,8 +114,7 @@ This is a plugin, so the source is included next to the DLL (`src/`, built with 
 `plugins/FarplaneUI.dll` is the release build of exactly this source (MSVC 2022, x86 Release).
 
 ### Changes since 0.11.0
-0.11.0 - 0.11.7 were submitted earlier the same day and haven't been reviewed; 0.11.8 replaces them
-(0.11.5 was a local test build only).
+0.11.0 - 0.11.8 haven't been reviewed; 0.11.9 replaces them (0.11.5 was a local test build only).
 - **0.11.1, Ctrl+R reply** (`src/modules/mod_chat.cpp`, declarations in `src/modules.hpp`): Ctrl+R
   (the game's "reply to last tell") opens FarplaneUI's own chat line prefilled with
   `/t <name of the last player who sent you a tell> ` instead of the game's input bar. The player
@@ -188,6 +186,12 @@ This is a plugin, so the source is included next to the DLL (`src/`, built with 
   - **Menus moved off the dock:** only windows that open in the lower half of the screen over the dock
     are moved (a tall list reaching down from the top is left alone), never off screen; a window whose
     height the game sets every frame is only moved sideways. Same set-position routine as before.
+- **0.11.9, linkshell requirement removed** (`src/farplaneui.cpp`, `src/farplaneui.hpp`): the UI now
+  starts once the character is logged in, whatever linkshell is equipped (or none). The linkshell
+  check (`src/lsgate.hpp`, deleted) and the `/fpui lscheck` command are gone, and `/fpui` commands
+  no longer answer "FarplaneUI is dormant: equip the Farplane linkshell" without a linkpearl. Before
+  login `/fpui <command>` only prints that the UI starts once the character is logged in. No new
+  reads, packets, hooks or memory writes; the linkshell item is no longer read.
 
 ### What it reads
 **Incoming packets.** It only listens: packets are never changed, blocked or injected.
@@ -205,8 +209,8 @@ This is a plugin, so the source is included next to the DLL (`src/`, built with 
 **Client memory, through Ashita's API:** party / alliance members (name, job, HP / MP / TP, zone,
 status icons), your own status effects and their timers, ability and spell recast timers, your
 inventory counts and equipped items, the target and entity list (name, position, HP %, claim,
-model size, render flags) for the target bar, target ring, enemy list and minimap, key items
-(quest steps), and your linkshell item (the Farplane check).
+model size, render flags) for the target bar, target ring, enemy list and minimap, and key items
+(quest steps).
 
 **Game data:** the client's map DATs (minimap), item / status / ability / spell names and icons
 from Ashita's resource manager. Monster and quest data are built in (see the README).
@@ -278,16 +282,16 @@ repository (the same data as the mobdb 2.x addon).
 
 ### Files in the reviewed version
 
-`SHA256SUMS` lists the SHA-256 of every file in this version (1559 files).
-Its own SHA-256 is `73dce7921d5843d8ebc58c6ec0191229dc8c057bcf74d15b4954644e0b83b776`.
+`SHA256SUMS` lists the SHA-256 of every file in this version (1558 files).
+Its own SHA-256 is `2fea2197b3e847b675169db522690b15ae7626cb22047a1f55a857e8fd9b64b9`.
 
 Main files:
 
 | File | SHA-256 |
 |---|---|
-| `plugins/FarplaneUI.dll` | `db974fe3fbc4084585639c82250e9b149c7bfc9af437e100b4dafc2fb422edfe` |
-| `CMakeLists.txt` | `fbb5711b4d2b725af8f02cb68c9c67d475b0f705c91bdd4a5123e9a4ad639b48` |
-| `src/farplaneui.cpp` | `33043f32ef6ca8d7f53279d71969802f5da76f8a79f92ef11f4e1658c0bf54ea` |
+| `plugins/FarplaneUI.dll` | `4e66bbcc5369754b281f3e2fab87c2a527f7cd250f888605309cadbf0d48f590` |
+| `CMakeLists.txt` | `63ad14598cca1b4ab27cca1a9d30349b32acd7a5fab6a0cfcb7ada529ef6792b` |
+| `src/farplaneui.cpp` | `39558e9a29113616b3c5d393f771f0210ea34b058d4945dfe3b7989e08c38738` |
 | `src/modules/mod_native.cpp` | `13e66032a47fd99c9f22574d643c4cf706050ed226c83dd66aef8cf9ba90d40a` |
 | `src/modules/mod_cmdmenu.cpp` | `fc22705d1ea25f053a88a92a89f8d3454be59b32a6e9f7e4143e5c5f35f28a73` |
 | `src/modules/mod_chat.cpp` | `5c940ca1456fb7c6cfc41a9a22654619decfff83776b092d7aa9d15c519816f5` |

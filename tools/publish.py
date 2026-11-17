@@ -116,13 +116,13 @@ Main files:
 
 # ---------------------------------------------------------------------------------------------
 ADDONS['farplaneui'] = dict(
-    src='farplaneui_plugin', folder='farplaneui', dest='plugins', version='0.11.8', submitted='2026-11-03',
-    note='Ashita v4 plugin (C++ DLL), source included. Hides and replaces parts of the game UI. One outgoing packet: 0x0F1 (cancel a status effect), only when the player asks for it. Replaces 0.11.0 - 0.11.7 (not yet reviewed).',
+    src='farplaneui_plugin', folder='farplaneui', dest='plugins', version='0.11.9', submitted='2026-11-17',
+    note='Ashita v4 plugin (C++ DLL), source included. Hides and replaces parts of the game UI. One outgoing packet: 0x0F1 (cancel a status effect), only when the player asks for it. Replaces 0.11.0 - 0.11.8 (not yet reviewed).',
     summary='**Author:** Spongeh, building on the work of the XIUI creators (special thanks to Shuu for the idea of '
             'packaging many UI elements into a single load). **Program:** Ashita v4 plugin (C++). **Type:** UI replacement. It reads data '
             'the client already has or receives, draws its own interface, and hides the game\'s own versions of '
             'the parts it replaces. The only packet it sends is the game\'s own "cancel this status effect" request, when the player '
-            'right-clicks an effect or confirms it in the game\'s status icon cursor. Only active while the Farplane linkshell is equipped.',
+            'right-clicks an effect or confirms it in the game\'s status icon cursor. Starts once the character is logged in; no linkshell is required.',
     key_files=['plugins/FarplaneUI.dll', 'CMakeLists.txt', 'src/farplaneui.cpp', 'src/modules/mod_native.cpp',
                'src/modules/mod_cmdmenu.cpp', 'src/modules/mod_chat.cpp', 'src/modules/mod_shadows.cpp', 'src/modules/mod_status.cpp', 'src/modules/mod_pad.cpp', 'src/modules/mod_party.cpp', 'src/modules/mod_mobfx.cpp', 'src/worldring.cpp', 'src/mask.cpp',
                'src/data/quest_db.hpp', 'tools/gen_mobdb.cpp', 'tools/gen_quest_db.cpp'],
@@ -131,8 +131,7 @@ This is a plugin, so the source is included next to the DLL (`src/`, built with 
 `plugins/FarplaneUI.dll` is the release build of exactly this source (MSVC 2022, x86 Release).
 
 ### Changes since 0.11.0
-0.11.0 - 0.11.7 were submitted earlier the same day and haven't been reviewed; 0.11.8 replaces them
-(0.11.5 was a local test build only).
+0.11.0 - 0.11.8 haven't been reviewed; 0.11.9 replaces them (0.11.5 was a local test build only).
 - **0.11.1, Ctrl+R reply** (`src/modules/mod_chat.cpp`, declarations in `src/modules.hpp`): Ctrl+R
   (the game's "reply to last tell") opens FarplaneUI's own chat line prefilled with
   `/t <name of the last player who sent you a tell> ` instead of the game's input bar. The player
@@ -204,6 +203,12 @@ This is a plugin, so the source is included next to the DLL (`src/`, built with 
   - **Menus moved off the dock:** only windows that open in the lower half of the screen over the dock
     are moved (a tall list reaching down from the top is left alone), never off screen; a window whose
     height the game sets every frame is only moved sideways. Same set-position routine as before.
+- **0.11.9, linkshell requirement removed** (`src/farplaneui.cpp`, `src/farplaneui.hpp`): the UI now
+  starts once the character is logged in, whatever linkshell is equipped (or none). The linkshell
+  check (`src/lsgate.hpp`, deleted) and the `/fpui lscheck` command are gone, and `/fpui` commands
+  no longer answer "FarplaneUI is dormant: equip the Farplane linkshell" without a linkpearl. Before
+  login `/fpui <command>` only prints that the UI starts once the character is logged in. No new
+  reads, packets, hooks or memory writes; the linkshell item is no longer read.
 
 ### What it reads
 **Incoming packets.** It only listens: packets are never changed, blocked or injected.
@@ -221,8 +226,8 @@ This is a plugin, so the source is included next to the DLL (`src/`, built with 
 **Client memory, through Ashita's API:** party / alliance members (name, job, HP / MP / TP, zone,
 status icons), your own status effects and their timers, ability and spell recast timers, your
 inventory counts and equipped items, the target and entity list (name, position, HP %, claim,
-model size, render flags) for the target bar, target ring, enemy list and minimap, key items
-(quest steps), and your linkshell item (the Farplane check).
+model size, render flags) for the target bar, target ring, enemy list and minimap, and key items
+(quest steps).
 
 **Game data:** the client's map DATs (minimap), item / status / ability / spell names and icons
 from Ashita's resource manager. Monster and quest data are built in (see the README).

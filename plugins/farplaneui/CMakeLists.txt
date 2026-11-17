@@ -35,7 +35,6 @@ set(${ASHITA_PROJECT_NAME}_src
     "src/cfgui.cpp"
     "src/cfgui.hpp"
     "src/data/party_recasts.hpp"
-    "src/lsgate.hpp"
     "src/mobdb.cpp"
     "src/mobdb.hpp"
     "src/worldring.cpp"
